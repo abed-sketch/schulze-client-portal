@@ -33,6 +33,11 @@ const messages: Record<ErrorCode, [string, string]> = {
     "Bitte prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   ],
 };
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL || "https://zwtmlrzwqnluosrdbjfv.supabase.co";
+const supabasePublishableKey =
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+  "sb_publishable_OZuJ4MY2fQDjbmgEnzQ_Eg_ux5stSq0";
 export function App({ token }: { token: string | null }) {
   const [state, setState] = useState<State>(
     token ? { kind: "loading" } : { kind: "error", code: "invalid-link" },
@@ -43,7 +48,9 @@ export function App({ token }: { token: string | null }) {
   useEffect(() => {
     if (!token) return;
     const c = new AbortController();
-    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
+    setState((current) =>
+      current.kind === "ready" ? current : { kind: "loading" },
+    );
     bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, c.signal)
       .then((data) => {
         if (!c.signal.aborted) setState({ kind: "ready", data });
@@ -61,8 +68,8 @@ export function App({ token }: { token: string | null }) {
   useEffect(() => {
     if (!token) return;
     const unsubscribe = subscribePortalInvalidations({
-      url: import.meta.env.VITE_SUPABASE_URL || "",
-      publishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "",
+      url: supabaseUrl,
+      publishableKey: supabasePublishableKey,
       onInvalidate: () => {
         if (realtimeDebounce.current !== undefined)
           window.clearTimeout(realtimeDebounce.current);
