@@ -16,7 +16,9 @@ function origins(value) {
 }
 const parents = origins(process.env.FRAME_ANCESTORS);
 const api = origins(process.env.API_ORIGIN);
-const csp = `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${api.join(" ")}; frame-ancestors ${parents.length ? parents.join(" ") : "'none'"}; base-uri 'none'; form-action 'none'; object-src 'none'`;
+const realtime = origins(process.env.SUPABASE_ORIGIN || "https://zwtmlrzwqnluosrdbjfv.supabase.co");
+const connect = [...new Set([...api, ...realtime])];
+const csp = `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${connect.join(" ")} ${realtime.map((origin) => origin.replace(/^https:/, "wss:")).join(" ")}; frame-ancestors ${parents.length ? parents.join(" ") : "'none'"}; base-uri 'none'; form-action 'none'; object-src 'none'`;
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
