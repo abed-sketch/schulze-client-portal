@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { Lead } from "../api/portal";
-const value = (s: string | null) => s?.trim() || "—";
+const value = (s: string | null | undefined) => s?.trim() || "—";
 function Website({ url }: { url: string | null }) {
   if (!url) return <span className="muted">—</span>;
   try {
@@ -62,9 +62,10 @@ function Notes({ notes }: { notes: string | null }) {
     <span className="muted">—</span>
   );
 }
-export function Leads({ leads }: { leads: Lead[] }) {
+export function Leads({ leads, admin = false }: { leads: Lead[]; admin?: boolean }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [client, setClient] = useState("");
   const [sort, setSort] = useState<"name" | "status" | "source">("name");
   const [desc, setDesc] = useState(false);
   const statuses = useMemo(
@@ -74,14 +75,23 @@ export function Leads({ leads }: { leads: Lead[] }) {
       ),
     [leads],
   );
+  const clients = useMemo(
+    () =>
+      [...new Set(leads.map((l) => l.clientName).filter((v): v is string => !!v))].sort(
+        (a, b) => a.localeCompare(b, "de"),
+      ),
+    [leads],
+  );
   const filtered = useMemo(
     () =>
       leads
         .filter(
           (l) =>
             (!status || (l.status || "Ohne Status") === status) &&
+            (!client || l.clientName === client) &&
             [
               l.name,
+              l.clientName,
               l.contactName,
               l.email,
               l.phone,
@@ -102,7 +112,7 @@ export function Leads({ leads }: { leads: Lead[] }) {
               numeric: true,
             }) * (desc ? -1 : 1),
         ),
-    [leads, search, status, sort, desc],
+    [leads, search, status, client, sort, desc],
   );
   function changeSort(key: typeof sort) {
     setDesc(sort === key ? !desc : false);
@@ -112,190 +122,78 @@ export function Leads({ leads }: { leads: Lead[] }) {
     <th aria-sort={sort === key ? (desc ? "descending" : "ascending") : "none"}>
       <button className="sort" onClick={() => changeSort(key)}>
         {label}
-        <span aria-hidden="true">
-          {sort === key ? (desc ? "↓" : "↑") : "↕"}
-        </span>
+        <span aria-hidden="true">{sort === key ? (desc ? "↓" : "↑") : "↕"}</span>
       </button>
     </th>
   );
   return (
-    <section className="leads-panel" aria-label="Ihre Interessenten">
+    <section className="leads-panel" aria-label={admin ? "Alle Kunden-Interessenten" : "Ihre Interessenten"}>
       <div className="panel-top">
         <div>
           <h2>
-            Alle Interessenten <span className="count">{leads.length}</span>
+            {admin ? "Alle Kunden-Interessenten" : "Alle Interessenten"}{" "}
+            <span className="count">{leads.length}</span>
           </h2>
-          <p>Ihre Kontakte und ihr aktueller Stand auf einen Blick.</p>
+          <p>{admin ? "Kundenübergreifende Teamansicht." : "Ihre Kontakte und ihr aktueller Stand auf einen Blick."}</p>
         </div>
-        <span className="read-only">
-          <span aria-hidden="true">◉</span> Leseansicht
-        </span>
+        <span className="read-only"><span aria-hidden="true">◉</span> Leseansicht</span>
       </div>
       <div className="toolbar">
         <label className="search">
           <span aria-hidden="true">⌕</span>
           <span className="sr-only">Interessenten suchen</span>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, Unternehmen oder Kontakt suchen …"
-            type="search"
-          />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, Unternehmen oder Kontakt suchen …" type="search" />
         </label>
+        {admin && (
+          <label className="filter">
+            <span>Kunde</span>
+            <select aria-label="Kunde" value={client} onChange={(e) => setClient(e.target.value)}>
+              <option value="">Alle Kunden</option>
+              {clients.map((name) => <option key={name}>{name}</option>)}
+            </select>
+          </label>
+        )}
         <label className="filter">
           <span>Status</span>
-          <select
-            aria-label="Status"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
+          <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="">Alle Status</option>
-            {statuses.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
+            {statuses.map((s) => <option key={s}>{s}</option>)}
           </select>
         </label>
         <label className="mobile-sort">
           <span className="sr-only">Sortieren nach</span>
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value as typeof sort);
-              setDesc(false);
-            }}
-          >
-            <option value="name">Name A–Z</option>
-            <option value="status">Status A–Z</option>
-            <option value="source">Quelle A–Z</option>
+          <select value={sort} onChange={(e) => { setSort(e.target.value as typeof sort); setDesc(false); }}>
+            <option value="name">Name A–Z</option><option value="status">Status A–Z</option><option value="source">Quelle A–Z</option>
           </select>
         </label>
       </div>
       {!filtered.length ? (
         <div className="empty">
-          <div className="state-icon" aria-hidden="true">
-            ⌕
-          </div>
-          <h3>
-            {leads.length
-              ? "Keine passenden Interessenten"
-              : "Hier beginnt Ihre Übersicht"}
-          </h3>
-          <p>
-            {leads.length
-              ? "Passen Sie Ihre Suche oder den Statusfilter an."
-              : "Sobald neue Interessenten vorliegen, finden Sie diese hier."}
-          </p>
-          {leads.length > 0 && (
-            <button
-              className="secondary"
-              onClick={() => {
-                setSearch("");
-                setStatus("");
-              }}
-            >
-              Filter zurücksetzen
-            </button>
-          )}
+          <div className="state-icon" aria-hidden="true">⌕</div>
+          <h3>{leads.length ? "Keine passenden Interessenten" : "Hier beginnt Ihre Übersicht"}</h3>
+          <p>{leads.length ? "Passen Sie Ihre Suche oder die Filter an." : "Sobald neue Interessenten vorliegen, finden Sie diese hier."}</p>
+          {leads.length > 0 && <button className="secondary" onClick={() => { setSearch(""); setStatus(""); setClient(""); }}>Filter zurücksetzen</button>}
         </div>
       ) : (
         <>
-          <div className="table-wrap">
-            <table>
-              <caption className="sr-only">
-                Interessenten mit Status, Kontaktinformationen und Notizen
-              </caption>
-              <thead>
-                <tr>
-                  {heading("name", "Interessent / Kontakt")}
-                  {heading("status", "Dealphase")}
-                  <th>Kontaktdaten</th>
-                  <th>Website</th>
-                  <th>Position</th>
-                  {heading("source", "Quelle")}
-                  <th>Notizen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((l) => (
-                  <tr key={l.id}>
-                    <td>
-                      <div className="lead-name">
-                        <span className="avatar" aria-hidden="true">
-                          {l.name.trim().slice(0, 1)}
-                        </span>
-                        <div>
-                          <strong>{l.name}</strong>
-                          <small>{value(l.contactName)}</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <Badge status={l.status} />
-                    </td>
-                    <td>
-                      <Contact lead={l} />
-                    </td>
-                    <td>
-                      <Website url={l.website} />
-                    </td>
-                    <td>{value(l.position)}</td>
-                    <td>
-                      <span className="source">{value(l.source)}</span>
-                    </td>
-                    <td>
-                      <Notes notes={l.notes} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="cards">
-            {filtered.map((l) => (
-              <article className="lead-card" key={l.id}>
-                <div className="card-heading">
-                  <div>
-                    <h3>{l.name}</h3>
-                    <p>{value(l.contactName)}</p>
-                  </div>
-                  <Badge status={l.status} />
-                </div>
-                <dl>
-                  <div>
-                    <dt>Kontakt</dt>
-                    <dd>
-                      <Contact lead={l} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Website</dt>
-                    <dd>
-                      <Website url={l.website} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Position</dt>
-                    <dd>{value(l.position)}</dd>
-                  </div>
-                  <div>
-                    <dt>Quelle</dt>
-                    <dd>{value(l.source)}</dd>
-                  </div>
-                  <div className="wide">
-                    <dt>Notizen</dt>
-                    <dd>
-                      <Notes notes={l.notes} />
-                    </dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
-          </div>
+          <div className="table-wrap"><table>
+            <caption className="sr-only">Interessenten mit Status, Kontaktinformationen und Notizen</caption>
+            <thead><tr>{admin && <th>Kunde</th>}{heading("name", "Interessent / Kontakt")}{heading("status", "Dealphase")}<th>Kontaktdaten</th><th>Website</th><th>Position</th>{heading("source", "Quelle")}<th>Notizen</th></tr></thead>
+            <tbody>{filtered.map((l) => <tr key={l.id}>
+              {admin && <td><strong>{value(l.clientName)}</strong></td>}
+              <td><div className="lead-name"><span className="avatar" aria-hidden="true">{l.name.trim().slice(0, 1)}</span><div><strong>{l.name}</strong><small>{value(l.contactName)}</small></div></div></td>
+              <td><Badge status={l.status} /></td><td><Contact lead={l} /></td><td><Website url={l.website} /></td><td>{value(l.position)}</td><td><span className="source">{value(l.source)}</span></td><td><Notes notes={l.notes} /></td>
+            </tr>)}</tbody>
+          </table></div>
+          <div className="cards">{filtered.map((l) => <article className="lead-card" key={l.id}>
+            <div className="card-heading"><div>{admin && <small>{value(l.clientName)}</small>}<h3>{l.name}</h3><p>{value(l.contactName)}</p></div><Badge status={l.status} /></div>
+            <dl><div><dt>Kontakt</dt><dd><Contact lead={l} /></dd></div><div><dt>Website</dt><dd><Website url={l.website} /></dd></div><div><dt>Position</dt><dd>{value(l.position)}</dd></div><div><dt>Quelle</dt><dd>{value(l.source)}</dd></div><div className="wide"><dt>Notizen</dt><dd><Notes notes={l.notes} /></dd></div></dl>
+          </article>)}</div>
         </>
       )}
       <div className="panel-footer" role="status">
         {filtered.length} von {leads.length} Interessenten
-        <span>Nur für Ihr Unternehmen sichtbar</span>
+        <span>{admin ? "Nur für das Schulze-Team sichtbar" : "Nur für Ihr Unternehmen sichtbar"}</span>
       </div>
     </section>
   );
