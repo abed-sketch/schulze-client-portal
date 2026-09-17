@@ -1,0 +1,46 @@
+{
+  "Schulze Portal · Airtable webhook maintenance": {
+    "activeVersionId": "937d2e82-4112-483d-b76f-c2a3d0145170",
+    "settings": {
+      "availableInMCP": true,
+      "executionOrder": "v1",
+      "executionTimeout": 120,
+      "saveDataErrorExecution": "none",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": false,
+      "saveManualExecutions": false,
+      "timezone": "Europe/Berlin"
+    },
+    "workflowId": "6n4b3cTXePK0vU2p"
+  },
+  "Schulze Portal · Airtable → Supabase sync": {
+    "activeVersionId": "989b72c1-fc58-46b8-9a4e-e9c525f553ee",
+    "settings": {
+      "availableInMCP": true,
+      "callerIds": "cSzoSJipggwtcrEf",
+      "callerPolicy": "workflowsFromAList",
+      "executionOrder": "v1",
+      "executionTimeout": 120,
+      "saveDataErrorExecution": "none",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": false,
+      "saveManualExecutions": false,
+      "timezone": "Europe/Berlin"
+    },
+    "workflowId": "m2Yri8eiqX2cO6DD"
+  },
+  "Schulze Portal · Realtime sync worker": {
+    "activeVersionId": "664e1b2e-4fb5-4db5-8ced-e44d866bb675",
+    "settings": {
+      "availableInMCP": true,
+      "executionOrder": "v1",
+      "executionTimeout": 170,
+      "saveDataErrorExecution": "none",
+      "saveDataSuccessExecution": "none",
+      "saveExecutionProgress": false,
+      "saveManualExecutions": false,
+      "timezone": "Europe/Berlin"
+    },
+    "workflowId": "cSzoSJipggwtcrEf"
+  }
+}
