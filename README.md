@@ -4,9 +4,13 @@ One customer-facing React application for the LearningSuite Vertriebsportal. Ger
 
 ## Current delivery status
 
-Frontend implemented; n8n bootstrap API and private token issuer are installed as inactive drafts. Backend integration is **not live**. An empty n8n hashed-token registry was created. No tokens have been issued, no customers created, and no existing provisioning workflow changed. See `backend/n8n/README.md` for installed workflow IDs, test evidence and activation steps. The application fails closed when configuration or a valid customer link is missing. It contains no production demo mode.
+Frontend implemented and deployed at `https://schulze-client-portal-production.up.railway.app/`. The read-only n8n bootstrap API (`qpxbpg33KsqgeiP7`) and private token issuer (`phBJ8osenbUnNCPb`) are published. FUL-V2-09 (`yhHEoqYAJGEJ1g0J`) now issues a customer-scoped portal grant only when creating a new Vertriebsportal Hub and injects the one-time bearer URL into `AirtableembedAppLinkNachEmbedd`. Only the SHA-256 token hash and non-secret grant metadata are persisted; V2-09, its issuer, and the V2-01 caller have execution payload persistence disabled.
 
-Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. Read-only record inspection returned **0 Leads and 0 Target Companies**. No real two-customer integration test is possible against these empty tables. See `backend/README.md` for the exact remaining integration work.
+The provisioning policy currently uses a 365-day portal-grant expiry. If Hub creation becomes uncertain after issuance, automatic re-issuance is blocked for manual reconciliation instead of silently creating another customer link. Existing LearningSuite Hubs are reused, but the documented LearningSuite API does not expose a creation-variable update endpoint; an existing Hub without the secure portal URL is therefore marked `Needs Migration` rather than mutated through an invented API contract.
+
+No real customer onboarding or token-bearing end-to-end run was executed as part of this integration update. Railway runtime variables/security headers and the real LearningSuite iframe still need a final browser-side verification before calling the deployment fully verified. See `backend/n8n/README.md` for exact live workflow state and the release test checklist.
+
+Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. Read-only record inspection returned **0 Leads and 0 Target Companies** at that time. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
 
 ## Local development
 
@@ -36,7 +40,7 @@ Browser tests intercept HTTPS API calls using fabricated fixtures. They prove fr
 
 `GET ${VITE_API_BASE_URL}/customer-portal/bootstrap`
 
-Authorization: `Bearer <43-character base64url opaque token>` (at least 256 bits of entropy). The native issuer generates 43 cryptographically random base64 characters and converts them to URL-safe form. Token shape validation in React is only input hygiene; all authorization must run in n8n. No customer ID/query selectors are accepted by the app. `credentials: omit`, no-store, redirect refusal, 25-second timeout, cancellation and sanitized errors are implemented.
+Authorization: `Bearer <43-character base64url opaque token>` (at least 256 bits of entropy). The native issuer generates 43 cryptographically random base64 characters and converts them to URL-safe form. Token shape validation in React is only input hygiene; all authorization runs in n8n. No customer ID/query selectors are accepted by the app. `credentials: omit`, no-store, redirect refusal, 25-second timeout, cancellation and sanitized errors are implemented.
 
 ```ts
 type BootstrapResponse = {
@@ -56,28 +60,34 @@ type BootstrapResponse = {
 };
 ```
 
-Optional values must be `null`, not absent. Unknown fields are dropped, malformed/duplicate lead identifiers reject the whole response. Maximum 10,000 leads per response; the backend must reject oversized datasets or implement a reviewed paginated contract, never silently truncate.
+Optional values must be `null`, not absent. Unknown fields are dropped, malformed/duplicate lead identifiers reject the whole response. Maximum 10,000 leads per response; the backend rejects oversized datasets rather than silently truncating.
 
-Status codes: 401/403 invalid link; 429 rate limit; 5xx service error. No backend error detail is displayed. The API must include CORS headers on error responses too.
+Status codes: 401/403 invalid link; 429 rate limit; 5xx service error. No backend error detail is displayed. The API includes the configured portal CORS origin on success, unauthorized and service-error responses.
 
 ## Railway deployment
 
-1. Deploy this repository/branch using the included Dockerfile; Railway configuration is in `railway.json`.
-2. Set **build-time** `VITE_API_BASE_URL` to the verified HTTPS API base, including `/webhook` for a direct n8n endpoint. Do not append `/customer-portal/bootstrap`.
-3. Set **runtime** `API_ORIGIN` to that API's exact origin, e.g. `https://automation.example.org` (no path).
-4. Set **runtime** `FRAME_ANCESTORS` to the actual LearningSuite parent origins, comma separated, with no trailing slash. Include every ancestor if LS nests frames. Empty means embedding is denied.
-5. Railway supplies `PORT`; default is 8080. Generate the public domain for that port. Healthcheck: `/healthz`.
-6. Verify proxy/CDN access logs redact query strings and Authorization headers before issuing real bearer URLs. The included server logs only its startup, never requests.
-7. Rebuild after changing `VITE_API_BASE_URL`; Vite embeds it at build time. This is public configuration, not a secret.
+Production values expected for this deployment:
+
+```env
+VITE_API_BASE_URL=https://automation.schulzemarketing.de/webhook
+API_ORIGIN=https://automation.schulzemarketing.de
+FRAME_ANCESTORS=https://schulze.learningsuite.io
+PORT=8080
+```
+
+1. Save the variables on the `schulze-client-portal` Railway service, not only in Suggested Variables.
+2. Redeploy after changing `VITE_API_BASE_URL`; Vite embeds it at build time.
+3. Verify `https://schulze-client-portal-production.up.railway.app/healthz` returns 200.
+4. Verify CSP contains `connect-src https://automation.schulzemarketing.de` and `frame-ancestors https://schulze.learningsuite.io` (plus any other real iframe ancestors if LearningSuite nests frames).
+5. Verify proxy/CDN access logs redact query strings and Authorization headers before using real bearer links. The included server itself logs only startup, never requests.
+6. Verify the n8n OPTIONS preflight from the portal origin allows GET plus the `Authorization` header.
 
 Docker build locally:
 
 ```sh
-docker build --build-arg VITE_API_BASE_URL=https://automation.example.org/webhook -t schulze-portal .
-docker run --rm -p 8080:8080 -e API_ORIGIN=https://automation.example.org -e FRAME_ANCESTORS=https://learning.example.org schulze-portal
+docker build --build-arg VITE_API_BASE_URL=https://automation.schulzemarketing.de/webhook -t schulze-portal .
+docker run --rm -p 8080:8080 -e API_ORIGIN=https://automation.schulzemarketing.de -e FRAME_ANCESTORS=https://schulze.learningsuite.io schulze-portal
 ```
-
-These domains are documentation examples, not verified production domains.
 
 Other hosts can serve `dist/`, but must configure the same HTTP headers as `server.mjs`; CSP `frame-ancestors` cannot be set through HTML meta tags. Do not add `X-Frame-Options: SAMEORIGIN` or `DENY` to a working cross-origin LS deployment.
 
@@ -96,7 +106,11 @@ Keep the reusable template variable:
 ></iframe>
 ```
 
-Provisioning must inject the hosted portal URL with its customer-scoped token, never a public Airtable URL. There is one application for all customers. The current V2-09 published workflow still has literal `appcode` in this variable; it was inspected but not modified.
+For a newly created Vertriebsportal Hub, V2-09 supplies:
+
+`https://schulze-client-portal-production.up.railway.app/?token=<one-time-issued-customer-token>`
+
+The raw token exists only in the in-memory provisioning path long enough to create the Hub. The saved onboarding resource state contains `portalGrantId`, expiry and status, not the token. Existing Hubs that were created with the previous Airtable/appcode value require deliberate migration because the supplied LearningSuite API documentation has create/list/access endpoints but no documented endpoint for changing an existing Hub's creation variables.
 
 ## Security and limitations
 
@@ -115,7 +129,8 @@ Provisioning must inject the hosted portal URL with its customer-scoped token, n
 - `src/components/Leads.tsx`, `src/styles.css`: table/cards, filters and responsive styling.
 - `server.mjs`, `Dockerfile`, `railway.json`, `.env.example`: deployment and headers.
 - `tests/`: API, authorization reference, production security headers and browser tests.
-- `backend/README.md`: verified mapping and live integration blockers.
+- `backend/README.md`: verified mapping and integration notes.
+- `backend/n8n/README.md`: live n8n IDs, security settings, provisioning and release checks.
 - `docs/superpowers/`: approved design and implementation plan.
 
 ## Preview
