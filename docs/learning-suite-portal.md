@@ -12,11 +12,11 @@ Embed the shared URL directly as an iframe, with no token or client/email query 
 
 ## Client and admin authorization
 
-Every Airtable Clients record is synced automatically every five minutes. Access is assigned using its single **Primary Contact**, the reciprocal **People.Clients** relationship, and that person's email. The signed-in LS account must be enabled and its email verified. Normalize only case and surrounding whitespace; aliases are not guessed. A verified contact assigned to several clients receives only those clients and can filter them.
+Every Airtable Clients record is synced automatically on change, with a five-minute recovery schedule. See [realtime sync](portal-realtime-sync.md). Access is assigned using its single **Primary Contact**, the reciprocal **People.Clients** relationship, and that person's email. The signed-in LS account must be enabled and its email verified. Normalize only case and surrounding whitespace; aliases are not guessed. A verified contact assigned to several clients receives only those clients and can filter them.
 
-A client without a primary-contact email has no LS login access; it is still visible to admins. This intentionally includes the synthetic Demo Client B record until a real authorized contact is assigned. No unrelated Airtable contacts are modified to make a login work.
+A client without a primary-contact email needs an explicit active Client grant in **Portal Access** to use LS login; admins can still see that client. Client grants must link exactly one company. No ownership is guessed.
 
-`public.portal_admins` contains the explicit `portal:admin` allowlist. `abed@apex-consulting.ai` was added as requested. This does not create or invite a LearningSuite/Supabase Auth user. Abed must sign in to LS with this verified email. Admins have read-only access to all portal clients/leads. To revoke, set `active=false` in this private table; the next authorized refresh denies admin scope (or falls back to that user's own client scope if explicitly assigned).
+Airtable **Portal Access** now controls explicit Admin and additional Client grants. The initial `public.portal_admins` allowlist is no longer used after Portal Access discovery. `abed@apex-consulting.ai` has the requested active Admin entry in Portal Access. This does not create or invite a LearningSuite/Supabase Auth user; Abed must sign in to LS with that verified email. Admins have read-only access to all portal clients/leads. To revoke the explicit grant, uncheck **Active** in Airtable. To downgrade an admin, set **Role=Client** and link the intended company. The next event-driven sync and authorized refresh apply that scope; independent Primary Contact access still applies.
 
 ## Security and operations
 
@@ -39,4 +39,4 @@ Validation completed: 35 unit tests and 16 browser tests; TypeScript and product
 
 ## Airtable-managed access
 
-The five-minute sync now discovers a `Portal Access` table automatically. See [the Omni prompt and access rules](portal-access-omni-prompt.md). Once that table is detected, it replaces the Supabase admin allowlist as the source of explicit Admin and additional Client grants. Primary Contact access remains automatic. Editing this table must be restricted to trusted internal administrators.
+The snapshot workflow discovers a `Portal Access` table automatically. See [the Omni prompt and access rules](portal-access-omni-prompt.md). Once that table is detected, it replaces the Supabase admin allowlist as the source of explicit Admin and additional Client grants. Primary Contact access remains automatic. Editing this table must be restricted to trusted internal administrators.

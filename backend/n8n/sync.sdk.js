@@ -1,5 +1,7 @@
 import { workflow, node, trigger, ifElse, newCredential, expr } from '@n8n/workflow-sdk';
 
+const eventSync = trigger({type:'n8n-nodes-base.executeWorkflowTrigger',version:1.1,config:{name:'Run verified realtime sync',parameters:{inputSource:'passthrough'},position:[0,-100]},output:[{}]});
+
 const manual = trigger({
   type: 'n8n-nodes-base.manualTrigger',
   version: 1,
@@ -219,6 +221,7 @@ return [{json:{ok:true,snapshot:value.snapshot,diagnostics:value.diagnostics}}];
 });
 
 export default workflow('schulze-portal-airtable-supabase-sync', 'Schulze Portal · Airtable → Supabase sync')
+  .add(eventSync).to(snapshotStart)
   .add(manual).to(snapshotStart)
   .add(schedule).to(snapshotStart)
   .add(snapshotStart).to(clients)

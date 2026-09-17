@@ -1,10 +1,12 @@
 # Schulze Client Portal: Supabase read model
 
+See [realtime sync and operations](portal-realtime-sync.md) for the current event-driven deployment and verification. Historical delivery notes below describe earlier stages.
+
 ## Runtime components
 
 | Component | Runtime ID | Purpose |
 | --- | --- | --- |
-| Airtable → Supabase sync | `m2Yri8eiqX2cO6DD` | Five-minute, full, fail-closed snapshot from V2 Airtable into dedicated portal tables. |
+| Airtable → Supabase sync | `m2Yri8eiqX2cO6DD` | Event-driven atomic snapshot from V2 Airtable; five-minute recovery schedule retained. |
 | Bearer-authorized read API | `qpxbpg33KsqgeiP7` | Validates the existing hashed portal grant, then reads Supabase instead of Airtable. |
 | Customer access issuer | `phBJ8osenbUnNCPb` | Existing client-scoped `portal:read` issuer; unchanged. |
 | Restricted admin issuer | `q9UAc79st7JdGU1z` | Manual-only, fixed 24-hour `portal:admin` grant. |
