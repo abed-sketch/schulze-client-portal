@@ -1,0 +1,342 @@
+{
+  "name": "Schulze Portal · Airtable → Supabase sync",
+  "nodes": [
+    {
+      "id": "85726576-306d-4fde-a288-0650df8af4ae",
+      "name": "Run portal sync manually",
+      "parameters": {},
+      "position": [
+        0,
+        120
+      ],
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "778dbe74-334f-42f7-85a6-76438983a329",
+      "name": "Read portal clients",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Client Name",
+            "Client ID",
+            "Target Companies"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblfPwZLXgjYuFMsc"
+        }
+      },
+      "position": [
+        300,
+        220
+      ],
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "ecdcd3f3-0f16-45e3-84ac-2d76aec5874f",
+      "name": "Every 5 minutes",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        320
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3
+    },
+    {
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "id": "279ada1b-08d5-491f-9bdb-f19bf2de3c3b",
+      "name": "Read portal target companies",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Client",
+            "Leads",
+            "Website"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbln087XtgwIP7HPG"
+        }
+      },
+      "position": [
+        560,
+        220
+      ],
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2
+    },
+    {
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "id": "db765c8d-1a5a-4784-8c9d-8acabff98560",
+      "name": "Read portal leads",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Lead Name",
+            "Target Company",
+            "Linked Person",
+            "Lead Status",
+            "Notes",
+            "Source"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblYeDa6ZbNL5YGTb"
+        }
+      },
+      "position": [
+        820,
+        220
+      ],
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2
+    },
+    {
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "id": "2ef7188a-b11a-4e1c-bd28-139dde9faefc",
+      "name": "Read portal people",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Full Name",
+            "Email",
+            "Phone",
+            "Role/Title"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblf2AsiyZTb306JQ"
+        }
+      },
+      "position": [
+        1080,
+        220
+      ],
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "5c4f5685-ad18-420b-b285-fc6b85acf0b4",
+      "name": "Build fail-closed snapshot",
+      "parameters": {
+        "jsCode": "const recordPattern=/^rec[A-Za-z0-9]{14}$/;\nconst fail=()=>{throw new Error('portal_source_data_invalid');};\nconst field=(r)=>r&&r.fields&&typeof r.fields==='object'&&!Array.isArray(r.fields)?r.fields:r;\nconst actual=(name,max)=>{const all=$(name).all().map(i=>i.json);if(all.length>max)fail();return all.filter(r=>r&&typeof r==='object'&&!Array.isArray(r)&&Object.keys(r).length);};\nconst unique=(name,max)=>{const rows=actual(name,max),seen=new Set();for(const r of rows){if(typeof r.id!=='string'||!recordPattern.test(r.id)||seen.has(r.id))fail();seen.add(r.id);}return rows;};\nconst links=(v,max)=>{if(v==null)return[];if(!Array.isArray(v)||v.length>max)fail();const out=[],seen=new Set();for(const id of v){if(typeof id!=='string'||!recordPattern.test(id)||seen.has(id))fail();seen.add(id);out.push(id);}return out;};\nconst text=(v,max=100000)=>{if(v==null||v==='')return null;if(typeof v!=='string'||v.length>max)fail();return v;};\nconst clientRows=unique('Read portal clients',10000),targetRows=unique('Read portal target companies',100000),leadRows=unique('Read portal leads',100000),personRows=unique('Read portal people',100000);\nconst clients=[],clientTargets=new Map();\nfor(const row of clientRows){const f=field(row),clientName=text(f['Client Name'],10000);if(!clientName||!clientName.trim())fail();const clientId=text(f['Client ID'],200);clients.push({airtableClientId:row.id,clientId,clientName,sourceUpdatedAt:null});clientTargets.set(row.id,new Set(links(f['Target Companies'],10000)));}\nclients.sort((a,b)=>a.airtableClientId.localeCompare(b.airtableClientId));\nconst personById=new Map(personRows.map(r=>[r.id,field(r)]));\nconst targetById=new Map();let skippedTargets=0;\nfor(const row of targetRows){const f=field(row),owners=links(f.Client,100),owner=owners.length===1?owners[0]:null;if(!owner||!clientTargets.has(owner)||!clientTargets.get(owner).has(row.id)){skippedTargets++;continue;}targetById.set(row.id,{clientId:owner,leadIds:new Set(links(f.Leads,10000)),website:text(f.Website,10000)});}\nconst normalizedLeads=[];let skippedLeads=0;\nfor(const row of leadRows){const f=field(row),targetIds=links(f['Target Company'],100),targetId=targetIds.length===1?targetIds[0]:null,target=targetId?targetById.get(targetId):null;if(!target||!target.leadIds.has(row.id)){skippedLeads++;continue;}const personIds=links(f['Linked Person'],100);if(personIds.length>1){skippedLeads++;continue;}const requested=personIds[0]||null,p=requested?personById.get(requested):null,personId=p?requested:null,leadName=text(f['Lead Name'],10000)||text(p&&p['Full Name'],10000)||'Unbenannter Interessent';normalizedLeads.push({airtableLeadId:row.id,airtableClientId:target.clientId,airtableTargetCompanyId:targetId,airtablePersonId:personId,leadName,contactName:text(p&&p['Full Name'],10000),status:text(f['Lead Status'],10000),website:target.website,notes:text(f.Notes),email:text(p&&p.Email,10000),phone:text(p&&p.Phone,10000),position:text(p&&p['Role/Title'],10000),source:text(f.Source,10000),sourceUpdatedAt:null});}\nnormalizedLeads.sort((a,b)=>a.airtableLeadId.localeCompare(b.airtableLeadId));\nreturn [{json:{clients,leads:normalizedLeads,diagnostics:{clientsScanned:clientRows.length,targetsScanned:targetRows.length,leadsScanned:leadRows.length,peopleScanned:personRows.length,clientsIncluded:clients.length,leadsIncluded:normalizedLeads.length,skippedTargets,skippedLeads}}}];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1340,
+        220
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "ec4edc35-7f02-4073-8548-f4a230f7c66c",
+      "name": "Replace Supabase portal snapshot",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "contentType": "json",
+        "genericAuthType": "httpBearerAuth",
+        "jsonBody": "={{ $json }}",
+        "method": "POST",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://zwtmlrzwqnluosrdbjfv.supabase.co/functions/v1/portal-sync"
+      },
+      "position": [
+        1600,
+        220
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5
+    },
+    {
+      "id": "34ca7652-5717-4aec-858f-0d9a212249c6",
+      "name": "Validate sync acknowledgement",
+      "parameters": {
+        "jsCode": "const value=$input.first().json;\nconst nonNegative=(v)=>Number.isSafeInteger(v)&&v>=0;\nif(!value||value.ok!==true||!value.snapshot||!value.diagnostics)throw new Error('portal_sync_failed');\nfor(const key of ['clients','leads','deletedClients','deletedLeads'])if(!nonNegative(value.snapshot[key]))throw new Error('portal_sync_failed');\nfor(const key of ['clientsScanned','targetsScanned','leadsScanned','peopleScanned','clientsIncluded','leadsIncluded','skippedTargets','skippedLeads'])if(!nonNegative(value.diagnostics[key]))throw new Error('portal_sync_failed');\nreturn [{json:{ok:true,snapshot:value.snapshot,diagnostics:value.diagnostics}}];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1860,
+        220
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "Build fail-closed snapshot": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Replace Supabase portal snapshot",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Every 5 minutes": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read portal clients",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read portal clients": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read portal target companies",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read portal leads": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read portal people",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read portal people": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build fail-closed snapshot",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read portal target companies": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read portal leads",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Replace Supabase portal snapshot": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate sync acknowledgement",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Run portal sync manually": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read portal clients",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "executionOrder": "v1",
+    "executionTimeout": 120,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "timezone": "Europe/Berlin"
+  }
+}

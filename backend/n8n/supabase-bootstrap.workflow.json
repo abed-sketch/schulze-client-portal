@@ -1,0 +1,533 @@
+{
+  "name": "Schulze Portal · Read customer leads",
+  "nodes": [
+    {
+      "id": "194aa81d-653f-4f40-8090-2b8d7164e37a",
+      "name": "Portal bootstrap",
+      "parameters": {
+        "authentication": "none",
+        "httpMethod": "GET",
+        "options": {
+          "allowedOrigins": "https://schulze-client-portal-production.up.railway.app"
+        },
+        "path": "customer-portal/bootstrap",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        1232
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "20eb598f-246a-46b3-85ed-5ebdc3c20f50"
+    },
+    {
+      "id": "9104de10-b82d-4a8d-9c00-8d1c77d59584",
+      "name": "Validate portal request",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsonOutput": "={{ (function validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n})($('Portal bootstrap').first().json,\"https://schulze-client-portal-production.up.railway.app\") }}",
+        "mode": "raw",
+        "options": {}
+      },
+      "position": [
+        224,
+        1232
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5
+    },
+    {
+      "id": "1808c438-99f9-429f-afb6-c967975f02f4",
+      "name": "Request accepted",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Validate portal request').first().json.valid }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        448,
+        1152
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3
+    },
+    {
+      "id": "01c31f1d-97a6-4ddd-ab41-54bd222e2eb3",
+      "name": "Hash access token",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "action": "hash",
+        "binaryData": false,
+        "dataPropertyName": "tokenHash",
+        "encoding": "hex",
+        "type": "SHA256",
+        "value": "={{ $('Validate portal request').first().json.token }}"
+      },
+      "position": [
+        672,
+        1088
+      ],
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "9e13ad5e-5413-4282-9cbf-321375b0bc23",
+      "name": "Find access grant",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "guf9ynWoJBgyN0dF"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "eq",
+              "keyName": "tokenHash",
+              "keyValue": "={{ $('Hash access token').first().json.tokenHash }}"
+            }
+          ]
+        },
+        "limit": 2,
+        "matchType": "allConditions",
+        "operation": "get",
+        "resource": "row",
+        "returnAll": false
+      },
+      "position": [
+        896,
+        1008
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "fb1b6954-ada3-4256-9207-5115a0a705dd",
+      "name": "Authorize access grant",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "const recordPattern=/^rec[A-Za-z0-9]{14}$/;\nconst rows=$input.all().map(item=>item.json).filter(row=>row&&typeof row==='object'&&!Array.isArray(row)&&Object.keys(row).length>0);\nconst hash=$('Hash access token').first().json.tokenHash;\nconst grant=rows[0];\nconst scope=grant?.scope;\nconst clientRecordId=grant?.clientRecordId;\nconst scoped=(scope==='portal:read'&&typeof clientRecordId==='string'&&recordPattern.test(clientRecordId))||(scope==='portal:admin'&&clientRecordId==='__portal_admin__');\nconst expiresAt=typeof grant?.expiresAt==='string'?Date.parse(grant.expiresAt):NaN;\nconst valid=rows.length===1&&typeof hash==='string'&&/^[a-f0-9]{64}$/.test(hash)&&grant.tokenHash===hash&&scoped&&(grant.revokedAt===null||grant.revokedAt==='')&&Number.isFinite(expiresAt)&&expiresAt>Date.now();\nreturn [{json:{valid,scope:valid?scope:'',clientRecordId:valid?clientRecordId:''}}];",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1120,
+        944
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "4b5f8e45-6bf6-47e7-a021-793c2f1d27a7",
+      "name": "Grant accepted",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Authorize access grant').first().json.valid }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        1344,
+        864
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3
+    },
+    {
+      "executeOnce": true,
+      "id": "7b937f78-4ab3-4865-92ae-83a05645894e",
+      "name": "Return customer portal",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://schulze-client-portal-production.up.railway.app"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": "={{ $('Validate Supabase portal model').first().json }}"
+      },
+      "position": [
+        4032,
+        0
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "executeOnce": true,
+      "id": "57bc8905-3a7d-42f0-9e8e-b888cdf30d9b",
+      "name": "Reject access",
+      "parameters": {
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://schulze-client-portal-production.up.railway.app"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": {
+          "error": "unauthorized",
+          "message": "Dieser Link ist ungültig oder abgelaufen."
+        }
+      },
+      "position": [
+        1568,
+        1376
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "executeOnce": true,
+      "id": "6c6e5fe2-c92d-45a8-9eaf-c5670d7ef5d3",
+      "name": "Return service error",
+      "parameters": {
+        "options": {
+          "responseCode": 503,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://schulze-client-portal-production.up.railway.app"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": {
+          "error": "service_unavailable",
+          "message": "Die Daten konnten nicht geladen werden."
+        }
+      },
+      "position": [
+        4032,
+        944
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "id": "216940d4-740e-460b-bcc2-70b3336848ea",
+      "name": "Sticky Note 2d232c77",
+      "parameters": {
+        "color": 2,
+        "content": "### Private Supabase portal read model\nBearer token → hashed grant → exact `portal:read` customer or `portal:admin` sentinel → authenticated Supabase Edge Function → strict response validation.\n\nAirtable remains the source of truth, but this request path reads Supabase only. Customer grants stay client-scoped; admin grants are manual, short-lived, and global."
+      },
+      "position": [
+        2016,
+        1440
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    },
+    {
+      "id": "c9af9911-9436-448e-bfda-eadd031dd27c",
+      "maxTries": 2,
+      "name": "Read Supabase portal model",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "contentType": "json",
+        "genericAuthType": "httpBearerAuth",
+        "jsonBody": "={{ { scope: $('Authorize access grant').first().json.scope, clientRecordId: $('Authorize access grant').first().json.clientRecordId } }}",
+        "method": "POST",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "https://zwtmlrzwqnluosrdbjfv.supabase.co/functions/v1/portal-read-model"
+      },
+      "position": [
+        1568,
+        768
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "waitBetweenTries": 1000
+    },
+    {
+      "id": "afd7b957-b73a-45ac-9a1c-24001abdea6a",
+      "name": "Validate Supabase portal model",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "const value=$input.first()?.json;\nconst grant=$('Authorize access grant').first().json;\nconst recordPattern=/^rec[A-Za-z0-9]{14}$/;\nconst fail=()=>{throw new Error('portal_data_unavailable');};\nconst object=(v)=>v&&typeof v==='object'&&!Array.isArray(v)?v:null;\nconst required=(v,max=10000)=>{if(typeof v!=='string'||!v.trim()||v.length>max)fail();return v;};\nconst optional=(v,max=100000)=>{if(v===undefined||v===null||v==='')return null;if(typeof v!=='string'||v.length>max)fail();return v;};\nconst source=object(value);if(!source)fail();\nconst customer=object(source.customer);if(!customer)fail();\nconst customerName=required(customer.name,10000);\nif(!Array.isArray(source.leads))fail();\nconst normalizeLead=(raw,admin,clientById)=>{const lead=object(raw);if(!lead)fail();const id=required(lead.id,200);const name=required(lead.name,10000);const normalized={id,name,contactName:optional(lead.contactName,10000),status:optional(lead.status,10000),website:optional(lead.website,10000),notes:optional(lead.notes),email:optional(lead.email,10000),phone:optional(lead.phone,10000),position:optional(lead.position,10000),source:optional(lead.source,10000),clientRecordId:null,clientName:null};if(admin){const clientRecordId=required(lead.clientRecordId,50);const clientName=required(lead.clientName,10000);if(!recordPattern.test(clientRecordId)||clientById.get(clientRecordId)!==clientName)fail();normalized.clientRecordId=clientRecordId;normalized.clientName=clientName;}else if((lead.clientRecordId!==undefined&&lead.clientRecordId!==null)||(lead.clientName!==undefined&&lead.clientName!==null))fail();return normalized;};\nif(grant.scope==='portal:read'&&recordPattern.test(grant.clientRecordId)){\n  if(source.mode!=='customer'||source.leads.length>10000)fail();\n  if(source.clients!==undefined&&(!Array.isArray(source.clients)||source.clients.length!==0))fail();\n  const seen=new Set();const leads=source.leads.map(raw=>{const lead=normalizeLead(raw,false,new Map());if(seen.has(lead.id))fail();seen.add(lead.id);return lead;});\n  return [{json:{mode:'customer',customer:{name:customerName},clients:[],leads}}];\n}\nif(grant.scope==='portal:admin'&&grant.clientRecordId==='__portal_admin__'){\n  if(source.mode!=='admin'||!Array.isArray(source.clients)||source.clients.length>10000||source.leads.length>100000)fail();\n  const clientById=new Map();const clients=source.clients.map(raw=>{const client=object(raw);if(!client)fail();const id=required(client.id,50);if(!recordPattern.test(id)||clientById.has(id))fail();const name=required(client.name,10000);const clientId=optional(client.clientId,200);clientById.set(id,name);return{id,clientId,name};});\n  const seen=new Set();const leads=source.leads.map(raw=>{const lead=normalizeLead(raw,true,clientById);if(seen.has(lead.id))fail();seen.add(lead.id);return lead;});\n  return [{json:{mode:'admin',customer:{name:customerName},clients,leads}}];\n}\nfail();",
+        "language": "javaScript",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1792,
+        704
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "Authorize access grant": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Grant accepted",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find access grant": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Authorize access grant",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Grant accepted": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read Supabase portal model",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Reject access",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Hash access token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find access grant",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Portal bootstrap": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate portal request",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read Supabase portal model": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate Supabase portal model",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Request accepted": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Hash access token",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Reject access",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate Supabase portal model": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Return customer portal",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate portal request": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Request accepted",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "executionTimeout": 60,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  }
+}

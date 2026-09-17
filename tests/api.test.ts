@@ -64,8 +64,10 @@ test("sends bearer only and returns only contract fields", async () => {
     });
   };
   assert.deepEqual(await bootstrap("https://api.test/webhook/", token), {
+    mode: "customer",
     customer: { name: "Test GmbH" },
     leads: [],
+    clients: undefined,
   });
 });
 for (const [status, code] of [
