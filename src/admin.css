@@ -1,0 +1,40 @@
+.admin-banner {
+  margin: 0 27px 18px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  border: 1px solid #d8e2cf;
+  border-radius: 8px;
+  background: #f4f7ef;
+  color: #52634b;
+  font-size: 11px;
+}
+.admin-banner strong {
+  color: #294c3f;
+  white-space: nowrap;
+}
+.client-chip {
+  display: inline-flex;
+  max-width: 240px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #eef2e8;
+  color: #47614f;
+  font-size: 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .admin-banner {
+    margin: 0 22px 18px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+}
+@media (max-width: 560px) {
+  .admin-banner {
+    margin-inline: 17px;
+  }
+}
