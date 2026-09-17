@@ -70,7 +70,7 @@ Target Company.Leads contains Lead
 Lead.Target Company contains exactly that Target Company
 ```
 
-The first live snapshot found one client and three leads, but the three target companies did not have a `Client` owner. The safe read model therefore contained one client and zero leads. Fix the missing Airtable ownership links; the next scheduled snapshot will include the leads automatically.
+Before the user-approved demo-data insertion below, the first live snapshot found one client and three leads, but the three target companies did not have a `Client` owner. The safe read model therefore contained one client and zero leads. Fix the missing Airtable ownership links; the next scheduled snapshot will include the leads automatically.
 
 ## Files
 
@@ -84,7 +84,7 @@ The first live snapshot found one client and three leads, but the three target c
 
 No secret values or raw portal tokens belong in this repository.
 
-## Delivery verification — 2026-09-17
+## Initial delivery verification — 2026-09-17
 
 - Both production HTTP nodes are explicitly bound to n8n Bearer credential **Schulze Portal Supabase** (`MpEnClmtG7bhzNBS`). This credential contains the project-local integration secret, never a portal token or a frontend key.
 - Sync active version: `781b92d0-99a1-42d4-8988-664c26627002`; bootstrap active version: `a92b5709-0097-4e8a-b1ed-7f724dcdf5ff`.
@@ -94,7 +94,7 @@ No secret values or raw portal tokens belong in this repository.
 - TypeScript check, production build, 32 unit tests, nine browser tests, and the production-header/iframe test passed. Browser coverage includes invalidation refresh, polling, revocation, team filtering, and responsive rendering.
 - `anon` and `authenticated` cannot execute `portal_replace_snapshot`; private client/lead data stays behind the Edge Functions. Execution payload persistence is disabled on the portal workflows.
 
-The manual **Schulze Portal · Verify delivery** workflow (`pq4a41K2rl91N1bF`) reads the two Edge Function models and source ownership only. It does not issue grants or write records. It targets the current test client; update that diagnostic input deliberately when testing a different existing customer.
+The initial manual **Schulze Portal · Verify delivery** workflow (`pq4a41K2rl91N1bF`) reads the two Edge Function models and source ownership only. It does not issue grants or write records. It targets the current test client; update that diagnostic input deliberately when testing a different existing customer.
 
 ## Operator handoff
 
@@ -105,3 +105,21 @@ The manual **Schulze Portal · Verify delivery** workflow (`pq4a41K2rl91N1bF`) r
 5. Confirm a populated real customer Hub renders in LearningSuite and repeat the isolation check with two owned customer datasets before claiming full customer acceptance. No real customer onboarding or LearningSuite account session was exercised during this delivery.
 
 The frontend uses only the publishable Supabase key for the non-sensitive event stream. Realtime reconnects and re-fetches through the authorized n8n API; a 60-second fallback continues if realtime is unavailable. No lead payload travels through the public event channel.
+
+## User-approved demo data and English UI — 2026-09-17
+
+The subsequent user request explicitly authorized sample Airtable data for `it@schulzemarketing.de` and other clients. No People record existed for that email, so a labeled test owner and two test clients were added; the existing APEX Test client was retained.
+
+| Client | Client record | Leads |
+| --- | --- | --- |
+| [PORTAL TEST 20260917] Schulze IT (primary contact: it@schulzemarketing.de) | `recDdrJYzfMSlJ74j` / KD119 | 3 |
+| APEX Test | `rec7XEt3yxTr7K24r` / KD118 | 3 |
+| [PORTAL TEST 20260917] Demo Client B | `recvvWMXIUB4HZwLE` / KD120 | 3 |
+
+Created totals: two Clients, ten People (one test owner and nine synthetic lead contacts), nine Target Companies and nine Leads. All synthetic contacts use example.com addresses. The two new clients are Paused and have no engagements or onboardings. No outreach, LearningSuite provisioning, invitations, or grants were executed. A primary-contact email association is not a login grant: the portal still requires a client-scoped bearer link.
+
+The seed completed in execution `1169376` after recovering from an expression error without duplicating the ten already-created People. The one-time helper `OIITX2zrnuqzwU13` was archived after success. Record IDs are preserved in `docs/portal-test-records-20260917.json` so any later cleanup can be limited to this exact fixture. Do not remove APEX Test or the three pre-existing unowned leads when cleaning up this fixture.
+
+Sync execution `1169378` populated the read model. Live diagnostic `1169383` confirmed three clients, nine admin leads, exactly three leads for each scoped customer, and no foreign-client names or admin metadata in customer responses. The original three targets without owners remain untouched and excluded. The manual verification helper now checks this three-client demo dataset; its payload persistence is disabled again.
+
+The portal now has a DE/EN switch. Language changes retain filters and the existing bearer session. UI text, errors, accessibility labels and known German status labels are translated; free-form customer data remains unchanged. TypeScript, build, all 32 unit tests and 12 browser tests pass, including translated-status search and arbitrary-status rendering safety.

@@ -1,3 +1,4 @@
+import { useLanguage } from "../i18n";
 import { useMemo, useState } from "react";
 import type { Lead, PortalClient, PortalMode } from "../api/portal";
 
@@ -40,6 +41,7 @@ function Contact({ lead }: { lead: Lead }) {
 }
 
 function Badge({ status }: { status: string | null }) {
+  const { t } = useLanguage();
   const s = status?.toLowerCase() || "";
   const tone = /gewonnen|won|kunde/.test(s)
     ? "green"
@@ -53,7 +55,7 @@ function Badge({ status }: { status: string | null }) {
   return (
     <span className={`badge ${tone}`}>
       <span aria-hidden="true" />
-      {status || "Ohne Status"}
+      {t(status || "Ohne Status")}
     </span>
   );
 }
@@ -78,6 +80,7 @@ export function Leads({
   mode: PortalMode;
   clients: PortalClient[];
 }) {
+  const { t, language } = useLanguage();
   const isAdmin = mode === "admin";
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -87,19 +90,19 @@ export function Leads({
 
   const statuses = useMemo(
     () =>
-      [...new Set(leads.map((l) => l.status || "Ohne Status"))].sort((a, b) =>
-        a.localeCompare(b, "de"),
+      [...new Set(leads.map((l) => l.status || "__no_status__"))].sort((a, b) =>
+        a.localeCompare(b, language),
       ),
-    [leads],
+    [leads, language],
   );
 
   const filtered = useMemo(() => {
-    const needle = search.trim().toLocaleLowerCase("de");
+    const needle = search.trim().toLocaleLowerCase(language);
     return leads
       .filter(
         (l) =>
           (!client || l.clientRecordId === client) &&
-          (!status || (l.status || "Ohne Status") === status) &&
+          (!status || (l.status || "__no_status__") === status) &&
           [
             l.name,
             l.clientName,
@@ -111,15 +114,16 @@ export function Leads({
             l.notes,
             l.source,
             l.status,
-          ].some((v) => v?.toLocaleLowerCase("de").includes(needle)),
+            t(l.status || "Ohne Status"),
+          ].some((v) => v?.toLocaleLowerCase(language).includes(needle)),
       )
       .sort(
         (a, b) =>
-          (a[sort] || "").localeCompare(b[sort] || "", "de", {
+          (a[sort] || "").localeCompare(b[sort] || "", language, {
             numeric: true,
           }) * (desc ? -1 : 1),
       );
-  }, [leads, search, status, client, sort, desc]);
+  }, [leads, search, status, client, sort, desc, language]);
 
   function changeSort(key: SortKey) {
     setDesc(sort === key ? !desc : false);
@@ -140,31 +144,31 @@ export function Leads({
   return (
     <section
       className="leads-panel"
-      aria-label={isAdmin ? "Alle Kunden-Interessenten" : "Ihre Interessenten"}
+      aria-label={isAdmin ? t("Alle Kunden-Interessenten") : t("Ihre Interessenten")}
     >
       <div className="panel-top">
         <div>
           <h2>
-            {isAdmin ? "Alle Kunden-Interessenten" : "Alle Interessenten"}{" "}
+            {isAdmin ? t("Alle Kunden-Interessenten") : t("Alle Interessenten")}{" "}
             <span className="count">{leads.length}</span>
           </h2>
           <p>
             {isAdmin
-              ? "Kunden, Kontakte und ihr aktueller Stand auf einen Blick."
-              : "Ihre Kontakte und ihr aktueller Stand auf einen Blick."}
+              ? t("Kunden, Kontakte und ihr aktueller Stand auf einen Blick.")
+              : t("Ihre Kontakte und ihr aktueller Stand auf einen Blick.")}
           </p>
         </div>
         <span className="read-only">
           <span aria-hidden="true">◉</span>{" "}
-          {isAdmin ? "Team-Leseansicht" : "Leseansicht"}
+          {isAdmin ? t("Team-Leseansicht") : t("Leseansicht")}
         </span>
       </div>
 
       {isAdmin && (
         <div className="admin-banner" role="status">
-          <strong>Admin-Leseansicht</strong>
+          <strong>{t("Admin-Leseansicht")}</strong>
           <span>
-            Dieser kurzlebige Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.
+            {t("Dieser kurzlebige Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.")}
           </span>
         </div>
       )}
@@ -172,27 +176,27 @@ export function Leads({
       <div className="toolbar">
         <label className="search">
           <span aria-hidden="true">⌕</span>
-          <span className="sr-only">Interessenten suchen</span>
+          <span className="sr-only">{t("Interessenten suchen")}</span>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
               isAdmin
-                ? "Kunde, Name, Unternehmen oder Kontakt suchen …"
-                : "Name, Unternehmen oder Kontakt suchen …"
+                ? t("Kunde, Name, Unternehmen oder Kontakt suchen …")
+                : t("Name, Unternehmen oder Kontakt suchen …")
             }
             type="search"
           />
         </label>
         {isAdmin && (
           <label className="filter">
-            <span>Kunde</span>
+            <span>{t("Kunde")}</span>
             <select
-              aria-label="Kunde"
+              aria-label={t("Kunde")}
               value={client}
               onChange={(e) => setClient(e.target.value)}
             >
-              <option value="">Alle Kunden</option>
+              <option value="">{t("Alle Kunden")}</option>
               {clients.map((c) => (
                 <option value={c.id} key={c.id}>
                   {c.name}
@@ -202,20 +206,20 @@ export function Leads({
           </label>
         )}
         <label className="filter">
-          <span>Status</span>
+          <span>{t("Status")}</span>
           <select
-            aria-label="Status"
+            aria-label={t("Status")}
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="">Alle Status</option>
+            <option value="">{t("Alle Status")}</option>
             {statuses.map((s) => (
-              <option key={s}>{s}</option>
+              <option value={s} key={s}>{t(s === "__no_status__" ? "Ohne Status" : s)}</option>
             ))}
           </select>
         </label>
         <label className="mobile-sort">
-          <span className="sr-only">Sortieren nach</span>
+          <span className="sr-only">{t("Sortieren nach")}</span>
           <select
             value={sort}
             onChange={(e) => {
@@ -223,10 +227,10 @@ export function Leads({
               setDesc(false);
             }}
           >
-            {isAdmin && <option value="clientName">Kunde A–Z</option>}
-            <option value="name">Name A–Z</option>
-            <option value="status">Status A–Z</option>
-            <option value="source">Quelle A–Z</option>
+            {isAdmin && <option value="clientName">{t("Kunde A–Z")}</option>}
+            <option value="name">{t("Name A–Z")}</option>
+            <option value="status">{t("Status A–Z")}</option>
+            <option value="source">{t("Quelle A–Z")}</option>
           </select>
         </label>
       </div>
@@ -238,17 +242,17 @@ export function Leads({
           </div>
           <h3>
             {leads.length
-              ? "Keine passenden Interessenten"
+              ? t("Keine passenden Interessenten")
               : isAdmin
-                ? "Noch keine synchronisierten Interessenten"
-                : "Hier beginnt Ihre Übersicht"}
+                ? t("Noch keine synchronisierten Interessenten")
+                : t("Hier beginnt Ihre Übersicht")}
           </h3>
           <p>
             {leads.length
-              ? "Passen Sie Ihre Suche oder die Filter an."
+              ? t("Passen Sie Ihre Suche oder die Filter an.")
               : isAdmin
-                ? "Sobald eindeutig zugeordnete Leads synchronisiert wurden, erscheinen sie hier."
-                : "Sobald neue Interessenten vorliegen, finden Sie diese hier."}
+                ? t("Sobald eindeutig zugeordnete Leads synchronisiert wurden, erscheinen sie hier.")
+                : t("Sobald neue Interessenten vorliegen, finden Sie diese hier.")}
           </p>
           {leads.length > 0 && (
             <button
@@ -259,7 +263,7 @@ export function Leads({
                 setClient("");
               }}
             >
-              Filter zurücksetzen
+              {t("Filter zurücksetzen")}
             </button>
           )}
         </div>
@@ -268,18 +272,18 @@ export function Leads({
           <div className="table-wrap">
             <table>
               <caption className="sr-only">
-                Interessenten mit Kunde, Status, Kontaktinformationen und Notizen
+                {t("Interessenten mit Kunde, Status, Kontaktinformationen und Notizen")}
               </caption>
               <thead>
                 <tr>
-                  {isAdmin && heading("clientName", "Kunde")}
-                  {heading("name", "Interessent / Kontakt")}
-                  {heading("status", "Dealphase")}
-                  <th>Kontaktdaten</th>
-                  <th>Website</th>
-                  <th>Position</th>
-                  {heading("source", "Quelle")}
-                  <th>Notizen</th>
+                  {isAdmin && heading("clientName", t("Kunde"))}
+                  {heading("name", t("Interessent / Kontakt"))}
+                  {heading("status", t("Dealphase"))}
+                  <th>{t("Kontaktdaten")}</th>
+                  <th>{t("Website")}</th>
+                  <th>{t("Position")}</th>
+                  {heading("source", t("Quelle"))}
+                  <th>{t("Notizen")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,34 +339,34 @@ export function Leads({
                 <dl>
                   {isAdmin && (
                     <div className="wide">
-                      <dt>Kunde</dt>
+                      <dt>{t("Kunde")}</dt>
                       <dd>
                         <span className="client-chip">{value(l.clientName)}</span>
                       </dd>
                     </div>
                   )}
                   <div>
-                    <dt>Kontakt</dt>
+                    <dt>{t("Kontakt")}</dt>
                     <dd>
                       <Contact lead={l} />
                     </dd>
                   </div>
                   <div>
-                    <dt>Website</dt>
+                    <dt>{t("Website")}</dt>
                     <dd>
                       <Website url={l.website} />
                     </dd>
                   </div>
                   <div>
-                    <dt>Position</dt>
+                    <dt>{t("Position")}</dt>
                     <dd>{value(l.position)}</dd>
                   </div>
                   <div>
-                    <dt>Quelle</dt>
+                    <dt>{t("Quelle")}</dt>
                     <dd>{value(l.source)}</dd>
                   </div>
                   <div className="wide">
-                    <dt>Notizen</dt>
+                    <dt>{t("Notizen")}</dt>
                     <dd>
                       <Notes notes={l.notes} />
                     </dd>
@@ -374,11 +378,11 @@ export function Leads({
         </>
       )}
       <div className="panel-footer" role="status">
-        {filtered.length} von {leads.length} Interessenten
+        {filtered.length} {t("von")} {leads.length} {t("Interessenten")}
         <span>
           {isAdmin
-            ? "Nur für das autorisierte Schulze-Team sichtbar"
-            : "Nur für Ihr Unternehmen sichtbar"}
+            ? t("Nur für das autorisierte Schulze-Team sichtbar")
+            : t("Nur für Ihr Unternehmen sichtbar")}
         </span>
       </div>
     </section>

@@ -1,6 +1,6 @@
 # Schulze Client Portal
 
-One customer-facing React application for the LearningSuite Vertriebsportal. German lead overview, responsive table/cards, search, status filter, sorting, safe external links and explicit loading/empty/error states.
+One customer-facing React application for the LearningSuite Vertriebsportal. German/English lead overview with a DE/EN switch, responsive table/cards, search, status filter, sorting, safe external links and explicit loading/empty/error states.
 
 ## Current delivery status
 
@@ -12,7 +12,11 @@ The Airtable → Supabase snapshot workflow is active every five minutes, and th
 
 No real customer onboarding or new production grant was issued during this cutover. The real LearningSuite customer iframe and populated two-customer isolation remain operator acceptance checks; automated browser tests use synthetic fixtures.
 
-Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. The latest read-only inspection found **one test client (APEX Test), three Leads, and three Target Companies without Client ownership**. The portal correctly contains zero leads until those ownership links are assigned. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
+Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. User-approved test data now provides **nine owned leads across three clients**, including a Schulze IT test client linked to `it@schulzemarketing.de`. Live scoped reads verified three leads per client and nine in the admin model. The original three unowned leads remain unchanged and excluded. See `docs/portal-supabase-sync.md` for fixture details. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
+
+## Languages
+
+Use **DE / EN** in the header. German is the default; the selection lasts for the current page session and does not store credentials or customer data. The interface, errors, filters and known German status labels are translated. Client names, contact details and notes remain as entered in Airtable. Switching languages preserves the bearer session and current filters.
 
 ## Local development
 

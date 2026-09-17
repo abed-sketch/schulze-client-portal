@@ -163,3 +163,54 @@ test("long customer and lead names never overflow mobile viewport", async ({ pag
   await expect(page.locator(".lead-card")).toHaveCount(4);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test("German and English switch preserves filtered data and bearer session", async ({ page }) => {
+  let calls = 0;
+  await page.route("https://portal-api.test/**", async route => {
+    calls++;
+    expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
+    await route.fulfill({ json: payload });
+  });
+  await page.goto("/?token=" + token);
+  await expect(page.locator("tbody tr")).toHaveCount(4);
+  await page.getByLabel("Status", { exact: true }).selectOption("Gewonnen");
+  const callsBeforeSwitch = calls;
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "All leads", exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Lead / contact" })).toBeVisible();
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr")).toContainText("Won");
+  await expect(page.getByRole("searchbox")).toHaveAttribute("placeholder", "Search name, company or contact …");
+  await page.getByRole("button", { name: "Deutsch", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "de");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.getByLabel("Status", { exact: true })).toHaveValue("Gewonnen");
+  expect(calls).toBe(callsBeforeSwitch);
+});
+
+test("English invalid-link and mobile layout remain usable", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "This link is not valid" })).toBeVisible();
+  await expect(page).toHaveTitle("Schulze Marketing · Sales portal");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+
+test("English status search and unknown status values are safe", async ({ page }) => {
+  await page.route("https://portal-api.test/**", route => route.fulfill({ json: {
+    ...payload, leads: [...payload.leads, lead("5", "Custom status lead", "__proto__")],
+  } }));
+  await page.goto("/?token=" + token);
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+  await page.getByRole("searchbox").fill("Meeting scheduled");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr")).toContainText("Hafenwerk");
+  await page.getByRole("searchbox").fill("__proto__");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await expect(page.locator("tbody tr")).toContainText("Custom status lead");
+});

@@ -1,3 +1,4 @@
+import { LanguageSwitch, useLanguage } from "./i18n";
 import { useEffect, useState } from "react";
 import {
   bootstrap,
@@ -38,6 +39,7 @@ const messages: Record<ErrorCode, [string, string]> = {
 };
 
 export function App({ token }: { token: string | null }) {
+  const { t } = useLanguage();
   const [state, setState] = useState<State>(
     token ? { kind: "loading" } : { kind: "error", code: "invalid-link" },
   );
@@ -95,7 +97,7 @@ export function App({ token }: { token: string | null }) {
   return (
     <>
       <a className="skip-link" href="#main">
-        Zum Inhalt
+        {t("Zum Inhalt")}
       </a>
       <header className="topbar">
         <a className="brand" href="#main" aria-label="Schulze Marketing">
@@ -106,44 +108,45 @@ export function App({ token }: { token: string | null }) {
             SCHULZE<small>MARKETING</small>
           </span>
         </a>
-        <div className="portal-label">VERTRIEBSPORTAL</div>
+        <div className="portal-label">{t("VERTRIEBSPORTAL")}</div>
         <div className="company">
           <span className="company-icon" aria-hidden="true">
             ▦
           </span>
           <span>
-            {ready ? ready.customer.name : "Ihr Kundenportal"}
-            <small>{isAdmin ? "Schulze Teamansicht" : "Persönlicher Bereich"}</small>
+            {ready ? ready.customer.name : t("Ihr Kundenportal")}
+            <small>{isAdmin ? t("Schulze Teamansicht") : t("Persönlicher Bereich")}</small>
           </span>
         </div>
+        <LanguageSwitch />
       </header>
       <main id="main">
         <div className="breadcrumb">
-          Vertriebsportal <span aria-hidden="true">/</span>{" "}
-          <strong>{isAdmin ? "Alle Kunden-Interessenten" : "Interessenten"}</strong>
+          {t("Vertriebsportal")} <span aria-hidden="true">/</span>{" "}
+          <strong>{isAdmin ? t("Alle Kunden-Interessenten") : t("Interessenten")}</strong>
         </div>
         <div className="page-heading">
           <div>
             <div className="eyebrow">
-              {isAdmin ? "SCHULZE TEAMANSICHT" : "GEMEINSAM WACHSEN"}
+              {isAdmin ? t("SCHULZE TEAMANSICHT") : t("GEMEINSAM WACHSEN")}
             </div>
             <h1>
               {isAdmin ? (
                 <>
-                  Alle Kundenleads
-                  <br className="heading-break" /> im Überblick<span>.</span>
+                  {t("Alle Kundenleads")}
+                  <br className="heading-break" /> {t("im Überblick")}<span>.</span>
                 </>
               ) : (
                 <>
-                  Aus Kontakten werden
-                  <br className="heading-break" /> Möglichkeiten<span>.</span>
+                  {t("Aus Kontakten werden")}
+                  <br className="heading-break" /> {t("Möglichkeiten")}<span>.</span>
                 </>
               )}
             </h1>
             <p>
               {isAdmin
-                ? "Kundenübergreifende Leseansicht für das Schulze-Team."
-                : "Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand."}
+                ? t("Kundenübergreifende Leseansicht für das Schulze-Team.")
+                : t("Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand.")}
             </p>
           </div>
           <div className="heading-symbol" aria-hidden="true">
@@ -160,7 +163,7 @@ export function App({ token }: { token: string | null }) {
             aria-live="polite"
           >
             <div className="loading-title">
-              Ihre Interessenten werden geladen …
+              {t("Ihre Interessenten werden geladen …")}
             </div>
             {Array.from({ length: 5 }, (_, i) => (
               <div className="skeleton-row" key={i}>
@@ -175,23 +178,23 @@ export function App({ token }: { token: string | null }) {
             <div className="state-icon" aria-hidden="true">
               {state.code === "invalid-link" ? "◇" : "↻"}
             </div>
-            <h2>{messages[state.code][0]}</h2>
-            <p>{messages[state.code][1]}</p>
+            <h2>{t(messages[state.code][0])}</h2>
+            <p>{t(messages[state.code][1])}</p>
             {!["invalid-link", "configuration"].includes(state.code) && (
               <button
                 className="primary"
                 onClick={() => setAttempt((a) => a + 1)}
               >
-                Erneut versuchen
+                {t("Erneut versuchen")}
               </button>
             )}
           </section>
         )}
         <footer>
           <span>SCHULZE MARKETING</span>
-          <p>Ihr Vertrieb. Unser gemeinsamer Fortschritt.</p>
+          <p>{t("Ihr Vertrieb. Unser gemeinsamer Fortschritt.")}</p>
           <span className="footer-private">
-            {isAdmin ? "Geschützte Teamansicht" : "Persönlicher Kundenbereich"}
+            {isAdmin ? t("Geschützte Teamansicht") : t("Persönlicher Kundenbereich")}
           </span>
         </footer>
       </main>
