@@ -1,0 +1,346 @@
+{
+  "name": "Schulze Portal · Issue customer access",
+  "nodes": [
+    {
+      "id": "50423422-860b-4ee6-8103-ff57ba949352",
+      "name": "Issue customer portal access",
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "clientRecordId"
+            },
+            {
+              "name": "expiresAt"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2
+    },
+    {
+      "id": "951018f9-e1d7-4d8e-abd6-5deb3f5d4a3a",
+      "name": "Validate issuance input",
+      "parameters": {
+        "jsonOutput": "={{ (() => { const x=$('Issue customer portal access').first().json; const exp=Date.parse(x.expiresAt); if(!/^rec[A-Za-z0-9]{14}$/.test(x.clientRecordId)||!Number.isFinite(exp)||exp<=Date.now()||exp>Date.now()+366*86400000) throw new Error('invalid_portal_grant_input'); return {clientRecordId:x.clientRecordId,expiresAt:new Date(exp).toISOString()}; })() }}",
+        "mode": "raw",
+        "options": {}
+      },
+      "position": [
+        224,
+        0
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "0a6f87ac-1b07-4d5b-9859-9699e6be4878",
+      "maxTries": 2,
+      "name": "Read issuance client",
+      "parameters": {
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "filterByFormula": "={{ \"RECORD_ID()='\" + $('Validate issuance input').first().json.clientRecordId + \"'\" }}",
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Client Name"
+          ]
+        },
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblfPwZLXgjYuFMsc"
+        }
+      },
+      "position": [
+        448,
+        0
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "oun3u0zdIMOShiCK",
+          "name": "Schulze x Apex Airtable"
+        }
+      }
+    },
+    {
+      "id": "f0f2a9d6-15f3-408f-8e64-b73fa41d9e91",
+      "name": "Verify issuance client",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nif($('Issue customer portal access').all().length!==1) fail(); const c=clientScope($input.all().map(i=>i.json),$('Validate issuance input').first().json.clientRecordId); return [{json:{clientRecordId:c.clientRecordId}}];"
+      },
+      "position": [
+        672,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "71e235f4-fdac-433f-a5ba-aeac60d82b1c",
+      "name": "Generate random access token",
+      "parameters": {
+        "action": "generate",
+        "dataPropertyName": "data",
+        "encodingType": "base64",
+        "stringLength": 43
+      },
+      "position": [
+        896,
+        0
+      ],
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2
+    },
+    {
+      "id": "385ecfa7-1d4e-4d31-a582-2013825f438e",
+      "name": "Encode URL-safe access token",
+      "parameters": {
+        "jsonOutput": "={{ (() => { const t=$('Generate random access token').first().json.data; if(typeof t!=='string') throw new Error('token_generation_failed'); const token=t.replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,''); if(!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('invalid_token_entropy'); return {token}; })() }}",
+        "mode": "raw",
+        "options": {}
+      },
+      "position": [
+        1120,
+        0
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5
+    },
+    {
+      "id": "992e70e0-1d45-43f9-86e0-39ea72bd9200",
+      "name": "Hash issued token",
+      "parameters": {
+        "dataPropertyName": "tokenHash",
+        "value": "={{ $('Encode URL-safe access token').first().json.token }}"
+      },
+      "position": [
+        1344,
+        0
+      ],
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2
+    },
+    {
+      "id": "b02f81ca-a803-4693-aafa-c307f5eae23c",
+      "name": "Store hashed access grant",
+      "parameters": {
+        "columns": {
+          "mappingMode": "defineBelow",
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "tokenHash",
+              "id": "tokenHash",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "clientRecordId",
+              "id": "clientRecordId",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "expiresAt",
+              "id": "expiresAt",
+              "required": false,
+              "type": "date"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "revokedAt",
+              "id": "revokedAt",
+              "required": false,
+              "type": "date"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "scope",
+              "id": "scope",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "clientRecordId": "={{ $('Validate issuance input').first().json.clientRecordId }}",
+            "expiresAt": "={{ $('Validate issuance input').first().json.expiresAt }}",
+            "revokedAt": "={{ null }}",
+            "scope": "portal:read",
+            "tokenHash": "={{ $('Hash issued token').first().json.tokenHash }}"
+          }
+        },
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "guf9ynWoJBgyN0dF"
+        },
+        "options": {}
+      },
+      "position": [
+        1568,
+        0
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "4b715c88-605c-4e13-be18-59a75dc2f66f",
+      "name": "Return issued access token",
+      "parameters": {
+        "jsonOutput": "={{ (() => { const saved=$('Store hashed access grant').first().json; const expected=$('Validate issuance input').first().json; const hash=$('Hash issued token').first().json.tokenHash; if(!saved.id||saved.tokenHash!==hash||saved.clientRecordId!==expected.clientRecordId||saved.scope!=='portal:read'||Date.parse(saved.expiresAt)!==Date.parse(expected.expiresAt)||saved.revokedAt!==null) throw new Error('grant_persistence_failed'); return {token:$('Encode URL-safe access token').first().json.token,expiresAt:expected.expiresAt,grantId:saved.id}; })() }}",
+        "mode": "raw",
+        "options": {}
+      },
+      "position": [
+        1792,
+        0
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5
+    },
+    {
+      "id": "33305e77-6875-406d-ae0a-a9755786652c",
+      "name": "Sticky Note 93d3f425",
+      "parameters": {
+        "color": 2,
+        "content": "### Private issuance only\nCaller must resolve the canonical Airtable client internally. Input: clientRecordId and expiresAt (maximum 366 days). Returns a one-time token and grantId; only its SHA-256 digest is stored.\nDisable execution payload persistence on every caller. Revoke a grant by setting revokedAt in schulzePortalGrants. No public issuance webhook.",
+        "height": 192
+      },
+      "position": [
+        832,
+        176
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Encode URL-safe access token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Hash issued token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Generate random access token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Encode URL-safe access token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Hash issued token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Store hashed access grant",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Issue customer portal access": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate issuance input",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read issuance client": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Verify issuance client",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Store hashed access grant": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Return issued access token",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate issuance input": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read issuance client",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Verify issuance client": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Generate random access token",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "binaryMode": "separate",
+    "callerPolicy": "none",
+    "executionOrder": "v1",
+    "executionTimeout": 60,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  },
+  "active": false
+}
