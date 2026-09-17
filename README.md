@@ -151,3 +151,8 @@ Synthetic browser-test fixtures only:
 ![Desktop preview](docs/previews/desktop.png)
 
 [Mobile preview](docs/previews/mobile.png)
+
+
+## LearningSuite sign-in
+
+The shared portal iframe URL now supports LearningSuite authentication through `portal-session`. Client scope comes from the verified LS email matching Airtable Clients.Primary Contact; restricted admins are managed in Supabase `portal_admins`. No client selector or email from the browser grants access. Existing issued opaque links remain supported by the n8n bootstrap. See [installation, authorization and acceptance checks](docs/learning-suite-portal.md).

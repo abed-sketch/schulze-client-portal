@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 export type Language = "de" | "en";
 const english: Record<string, string> = {
+  "Bitte in LearningSuite öffnen": "Please open in LearningSuite",
+  "Öffnen Sie das Vertriebsportal in Ihrem angemeldeten LearningSuite-Konto. Falls es bereits dort geöffnet ist, laden Sie die LearningSuite-Seite neu.": "Open the sales portal from your signed-in LearningSuite account. If it is already open there, reload the LearningSuite page.",
+  "Ihr Zugang ist noch nicht zugeordnet": "Your access has not been assigned yet",
+  "Ihre bestätigte LearningSuite-E-Mail muss beim Hauptkontakt Ihres Kundenkontos hinterlegt sein. Bitte wenden Sie sich an Ihr Schulze-Team.": "Your verified LearningSuite email must match the primary contact on your client account. Please contact your Schulze team.",
+  "Meine Unternehmen": "My companies",
   "Zum Inhalt": "Skip to content",
   "VERTRIEBSPORTAL": "SALES PORTAL",
   "Ihr Kundenportal": "Your client portal",
@@ -40,7 +45,7 @@ const english: Record<string, string> = {
   "Team-Leseansicht": "Team read-only view",
   "Leseansicht": "Read-only view",
   "Admin-Leseansicht": "Admin read-only view",
-  "Dieser kurzlebige Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.": "This temporary access shows leads from all clients. Editing is not available here.",
+  "Dieser geschützte Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.": "This temporary access shows leads from all clients. Editing is not available here.",
   "Interessenten suchen": "Search leads",
   "Kunde, Name, Unternehmen oder Kontakt suchen …": "Search client, name, company or contact …",
   "Name, Unternehmen oder Kontakt suchen …": "Search name, company or contact …",

@@ -2,6 +2,7 @@ import { LanguageSwitch, useLanguage } from "./i18n";
 import { useEffect, useState } from "react";
 import {
   bootstrap,
+  bootstrapLearningSuite,
   PortalError,
   type BootstrapResponse,
   type ErrorCode,
@@ -9,6 +10,7 @@ import {
 import { Leads } from "./components/Leads";
 import { subscribePortalInvalidations } from "./api/realtime";
 import "./admin.css";
+import { requestLearningSuiteToken } from "./api/learningSuite";
 
 type State =
   | { kind: "loading" }
@@ -16,6 +18,8 @@ type State =
   | { kind: "error"; code: ErrorCode };
 
 const messages: Record<ErrorCode, [string, string]> = {
+  "ls-required": ["Bitte in LearningSuite öffnen", "Öffnen Sie das Vertriebsportal in Ihrem angemeldeten LearningSuite-Konto. Falls es bereits dort geöffnet ist, laden Sie die LearningSuite-Seite neu."],
+  "not-provisioned": ["Ihr Zugang ist noch nicht zugeordnet", "Ihre bestätigte LearningSuite-E-Mail muss beim Hauptkontakt Ihres Kundenkontos hinterlegt sein. Bitte wenden Sie sich an Ihr Schulze-Team."],
   "invalid-link": [
     "Dieser Link ist nicht gültig",
     "Bitte öffnen Sie Ihren persönlichen Vertriebsportal-Link erneut in LearningSuite. Falls der Zugang abgelaufen ist, wenden Sie sich an Ihr Schulze-Team.",
@@ -41,34 +45,53 @@ const messages: Record<ErrorCode, [string, string]> = {
 export function App({ token }: { token: string | null }) {
   const { t } = useLanguage();
   const [state, setState] = useState<State>(
-    token ? { kind: "loading" } : { kind: "error", code: "invalid-link" },
+    { kind: "loading" },
   );
   const [attempt, setAttempt] = useState(0);
+  const [presentation, setPresentation] = useState<{key:string;mode:BootstrapResponse["mode"];multi:boolean} | null>(null);
 
   useEffect(() => {
-    if (!token) return;
     const c = new AbortController();
-    let inFlight = false;
+    let active: AbortController | null = null;
     let revoked = false;
     let debounce: number | undefined;
     setState({ kind: "loading" });
     const refresh = async () => {
-      if (inFlight || revoked || c.signal.aborted || document.hidden) return;
-      inFlight = true;
+      if (active || revoked || c.signal.aborted || document.hidden) return;
+      const request = new AbortController();
+      active = request;
+      const signal = AbortSignal.any([c.signal, request.signal]);
       try {
-        const data = await bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, c.signal);
-        if (!c.signal.aborted) setState({ kind: "ready", data });
+        let data: BootstrapResponse;
+        if (token) data = await bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, signal);
+        else {
+          const sessionToken = await requestLearningSuiteToken(signal);
+          try { data = await bootstrapLearningSuite(sessionToken,signal); }
+          catch (error) {
+            if (!(error instanceof PortalError) || error.code !== 'ls-required') throw error;
+            data = await bootstrapLearningSuite(await requestLearningSuiteToken(signal),signal);
+          }
+        }
+        if (!signal.aborted && active === request) {
+          setPresentation({key:data.mode + ':' + (data.sessionKey || 'legacy'),mode:data.mode,multi:data.clients.length>1});
+          setState({ kind: "ready", data });
+        }
       } catch (e) {
-        if (!c.signal.aborted) {
+        if (!signal.aborted && active === request) {
           const code = e instanceof PortalError ? e.code : "service";
           revoked = code === "invalid-link";
           setState({ kind: "error", code });
         }
       } finally {
-        inFlight = false;
+        if (active === request) active = null;
       }
     };
     const invalidate = () => {
+      if (!token) {
+        active?.abort();
+        active = null;
+        setState({kind:"loading"});
+      }
       window.clearTimeout(debounce);
       debounce = window.setTimeout(() => { void refresh(); }, 300);
     };
@@ -114,7 +137,7 @@ export function App({ token }: { token: string | null }) {
             ▦
           </span>
           <span>
-            {ready ? ready.customer.name : t("Ihr Kundenportal")}
+            {ready ? t(ready.customer.name) : t("Ihr Kundenportal")}
             <small>{isAdmin ? t("Schulze Teamansicht") : t("Persönlicher Bereich")}</small>
           </span>
         </div>
@@ -154,9 +177,12 @@ export function App({ token }: { token: string | null }) {
             <i />
           </div>
         </div>
-        {state.kind === "ready" ? (
-          <Leads mode={state.data.mode} clients={state.data.clients} leads={state.data.leads} />
-        ) : state.kind === "loading" ? (
+        {presentation && state.kind !== 'error' && (
+          <div aria-busy={!ready}>
+            <Leads key={presentation.key} mode={presentation.mode} showClientFilter={presentation.multi} clients={ready?.clients || []} leads={ready?.leads || []} />
+          </div>
+        )}
+        {state.kind === "ready" ? null : state.kind === "loading" ? (
           <section
             className="loading leads-panel"
             role="status"

@@ -27,7 +27,7 @@ test('full snapshot allowlists fields and joins a valid owned lead',()=>{
     [{id:lead,fields:{'Target Company':[target],'Linked Person':[person],'Lead Name':'Example','Lead Status':'New',Notes:'Allowed',Source:'LinkedIn',Private:'hidden'}}],
     [{id:person,fields:{'Full Name':'Person',Email:'p@example.test',Phone:'+49 1','Role/Title':'CEO',Private:'hidden'}}],
   );
-  assert.deepEqual(result.clients,[{airtableClientId:client,clientId:'KD014',clientName:'Alpha GmbH',sourceUpdatedAt:null}]);
+  assert.deepEqual(result.clients,[{airtableClientId:client,clientId:'KD014',clientName:'Alpha GmbH',primaryContactEmail:null,sourceUpdatedAt:null}]);
   assert.equal(result.leads.length,1);
   assert.deepEqual(result.leads[0],{
     airtableLeadId:lead,airtableClientId:client,airtableTargetCompanyId:target,airtablePersonId:person,
@@ -72,4 +72,14 @@ test('snapshot rejects duplicate source IDs, malformed clients and excessive inp
   assert.throws(()=>normalizeSnapshot([{id:'bad',fields:{'Client Name':'A'}}],[],[],[]));
   assert.throws(()=>normalizeSnapshot([{id:client,fields:{'Client Name':''}}],[],[],[]));
   assert.throws(()=>normalizeSnapshot(Array.from({length:10001},()=>({})),[],[],[]));
+});
+
+test('access matches only a reciprocal primary contact with a valid normalized email',()=>{
+ const clientRow={id:client,fields:{'Client Name':'Alpha','Primary Contact':[person]}};
+ const primary={id:person,fields:{Email:' OWNER@Example.com ',Clients:[client]}};
+ assert.equal(normalizeSnapshot([clientRow],[],[],[primary]).clients[0].primaryContactEmail,'owner@example.com');
+ for(const people of [[],[{...primary,fields:{...primary.fields,Clients:[other]}}],[{...primary,fields:{...primary.fields,Email:'bad'}}]]) {
+  assert.equal(normalizeSnapshot([clientRow],[],[],people).clients[0].primaryContactEmail,null);
+ }
+ assert.equal(normalizeSnapshot([{...clientRow,fields:{...clientRow.fields,'Primary Contact':[person,other]}}],[],[],[primary]).clients[0].primaryContactEmail,null);
 });
