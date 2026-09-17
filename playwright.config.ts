@@ -11,7 +11,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "VITE_API_BASE_URL=https://portal-api.test/webhook npx vite --host 127.0.0.1 --port 4173",
+      "npm run build && VITE_API_BASE_URL=https://portal-api.test/webhook npx vite --host 127.0.0.1 --port 4173",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,
   },

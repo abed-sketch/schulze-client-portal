@@ -30,7 +30,7 @@ const clients = node({
       authentication: 'airtableTokenApi', base, resource: 'record', operation: 'search',
       table: { __rl: true, mode: 'id', value: 'tblfPwZLXgjYuFMsc' },
       returnAll: true,
-      options: { fields: ['Client Name', 'Client ID', 'Target Companies'] },
+      options: { fields: ['Client Name', 'Client ID', 'Target Companies', 'Primary Contact'] },
     },
     credentials: { airtableTokenApi: airtable },
     alwaysOutputData: true,
@@ -83,7 +83,7 @@ const people = node({
       authentication: 'airtableTokenApi', base, resource: 'record', operation: 'search',
       table: { __rl: true, mode: 'id', value: 'tblf2AsiyZTb306JQ' },
       returnAll: true,
-      options: { fields: ['Full Name', 'Email', 'Phone', 'Role/Title'] },
+      options: { fields: ['Full Name', 'Email', 'Phone', 'Role/Title', 'Clients'] },
     },
     credentials: { airtableTokenApi: airtable },
     alwaysOutputData: true,
@@ -107,10 +107,10 @@ const unique=(name,max)=>{const rows=actual(name,max),seen=new Set();for(const r
 const links=(v,max)=>{if(v==null)return[];if(!Array.isArray(v)||v.length>max)fail();const out=[],seen=new Set();for(const id of v){if(typeof id!=='string'||!recordPattern.test(id)||seen.has(id))fail();seen.add(id);out.push(id);}return out;};
 const text=(v,max=100000)=>{if(v==null||v==='')return null;if(typeof v!=='string'||v.length>max)fail();return v;};
 const clientRows=unique('Read portal clients',10000),targetRows=unique('Read portal target companies',100000),leadRows=unique('Read portal leads',100000),personRows=unique('Read portal people',100000);
-const clients=[],clientTargets=new Map();
-for(const row of clientRows){const f=field(row),clientName=text(f['Client Name'],10000);if(!clientName||!clientName.trim())fail();const clientId=text(f['Client ID'],200);clients.push({airtableClientId:row.id,clientId,clientName,sourceUpdatedAt:null});clientTargets.set(row.id,new Set(links(f['Target Companies'],10000)));}
-clients.sort((a,b)=>a.airtableClientId.localeCompare(b.airtableClientId));
 const personById=new Map(personRows.map(r=>[r.id,field(r)]));
+const clients=[],clientTargets=new Map();
+for(const row of clientRows){const f=field(row),clientName=text(f['Client Name'],10000);if(!clientName||!clientName.trim())fail();const clientId=text(f['Client ID'],200);const contacts=links(f['Primary Contact'],100),p=contacts.length===1?personById.get(contacts[0]):null,candidate=p&&links(p.Clients,10000).includes(row.id)?text(p.Email,10000)?.trim().toLowerCase():null,primaryContactEmail=candidate&&candidate.length<=254&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(candidate)?candidate:null;clients.push({airtableClientId:row.id,clientId,clientName,primaryContactEmail,sourceUpdatedAt:null});clientTargets.set(row.id,new Set(links(f['Target Companies'],10000)));}
+clients.sort((a,b)=>a.airtableClientId.localeCompare(b.airtableClientId));
 const targetById=new Map();let skippedTargets=0;
 for(const row of targetRows){const f=field(row),owners=links(f.Client,100),owner=owners.length===1?owners[0]:null;if(!owner||!clientTargets.has(owner)||!clientTargets.get(owner).has(row.id)){skippedTargets++;continue;}targetById.set(row.id,{clientId:owner,leadIds:new Set(links(f.Leads,10000)),website:text(f.Website,10000)});}
 const normalizedLeads=[];let skippedLeads=0;

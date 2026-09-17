@@ -89,6 +89,7 @@ type SnapshotClient = {
   airtableClientId: string;
   clientId: string | null;
   clientName: string;
+  primaryContactEmail: string | null;
   sourceUpdatedAt: null;
 };
 type SnapshotLead = {
@@ -137,6 +138,8 @@ export function normalizeSnapshot(clientRows: Row[], targetRows: Row[], leadRows
   const leadsInput=uniqueSourceRows(leadRows,100000);
   const peopleInput=uniqueSourceRows(personRows,100000);
 
+  const people=new Map<string,Row>();
+  for(const row of peopleInput) people.set(row.id as string,fields(row));
   const clients:SnapshotClient[]=[];
   const clientTargets=new Map<string,Set<string>>();
   for(const row of clientsInput){
@@ -144,13 +147,14 @@ export function normalizeSnapshot(clientRows: Row[], targetRows: Row[], leadRows
     if(!clientName||clientName.length>10000) fail();
     const clientId=optional(f['Client ID']);
     if(clientId&&clientId.length>200) fail();
-    clients.push({airtableClientId:row.id as string,clientId,clientName,sourceUpdatedAt:null});
+    const contacts=linked(f['Primary Contact'],100);
+    const person=contacts.length===1 ? people.get(contacts[0]) : undefined;
+    const candidate=person && linked(person.Clients,10000).includes(row.id as string) ? optional(person.Email)?.trim().toLowerCase() : null;
+    const primaryContactEmail=candidate && candidate.length<=254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate : null;
+    clients.push({airtableClientId:row.id as string,clientId,clientName,primaryContactEmail,sourceUpdatedAt:null});
     clientTargets.set(row.id as string,new Set(linked(f['Target Companies'],10000)));
   }
   clients.sort((a,b)=>a.airtableClientId.localeCompare(b.airtableClientId));
-
-  const people=new Map<string,Row>();
-  for(const row of peopleInput) people.set(row.id as string,fields(row));
 
   const targets=new Map<string,{clientId:string;leadIds:Set<string>;website:string|null}>();
   let skippedTargets=0;

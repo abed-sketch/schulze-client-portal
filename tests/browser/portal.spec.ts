@@ -123,14 +123,14 @@ test("mobile cards fit and search works", async ({ page }) => {
   await page.screenshot({ path: "test-results/mobile.png", fullPage: true });
 });
 
-test("invalid link makes no API request and 401 shows invalid state", async ({ page }) => {
+test("standalone portal requires LearningSuite and legacy 401 shows invalid state", async ({ page }) => {
   let requests = 0;
   await page.route("https://portal-api.test/**", (r) => {
     requests++;
     return r.fulfill({ status: 401, json: { error: "unauthorized" } });
   });
   await page.goto("/?customer=KD015");
-  await expect(page.getByRole("heading", { name: "Dieser Link ist nicht gültig" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Bitte in LearningSuite öffnen" })).toBeVisible();
   expect(requests).toBe(0);
   await page.goto("/?token=" + token);
   await expect(page.getByRole("heading", { name: "Dieser Link ist nicht gültig" })).toBeVisible();
@@ -193,7 +193,7 @@ test("English invalid-link and mobile layout remain usable", async ({ page }) =>
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/");
   await page.getByRole("button", { name: "English", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "This link is not valid" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Please open in LearningSuite" })).toBeVisible();
   await expect(page).toHaveTitle("Schulze Marketing · Sales portal");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

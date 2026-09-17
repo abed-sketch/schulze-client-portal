@@ -74,18 +74,21 @@ function Notes({ notes }: { notes: string | null }) {
 export function Leads({
   leads,
   mode,
+  showClientFilter = false,
   clients,
 }: {
   leads: Lead[];
   mode: PortalMode;
+  showClientFilter?: boolean;
   clients: PortalClient[];
 }) {
   const { t, language } = useLanguage();
   const isAdmin = mode === "admin";
+  const showClients = isAdmin || showClientFilter || clients.length > 1;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [client, setClient] = useState("");
-  const [sort, setSort] = useState<SortKey>(isAdmin ? "clientName" : "name");
+  const [sort, setSort] = useState<SortKey>(showClients ? "clientName" : "name");
   const [desc, setDesc] = useState(false);
 
   const statuses = useMemo(
@@ -168,7 +171,7 @@ export function Leads({
         <div className="admin-banner" role="status">
           <strong>{t("Admin-Leseansicht")}</strong>
           <span>
-            {t("Dieser kurzlebige Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.")}
+            {t("Dieser geschützte Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.")}
           </span>
         </div>
       )}
@@ -188,7 +191,7 @@ export function Leads({
             type="search"
           />
         </label>
-        {isAdmin && (
+        {showClients && (
           <label className="filter">
             <span>{t("Kunde")}</span>
             <select
@@ -227,7 +230,7 @@ export function Leads({
               setDesc(false);
             }}
           >
-            {isAdmin && <option value="clientName">{t("Kunde A–Z")}</option>}
+            {showClients && <option value="clientName">{t("Kunde A–Z")}</option>}
             <option value="name">{t("Name A–Z")}</option>
             <option value="status">{t("Status A–Z")}</option>
             <option value="source">{t("Quelle A–Z")}</option>
@@ -276,7 +279,7 @@ export function Leads({
               </caption>
               <thead>
                 <tr>
-                  {isAdmin && heading("clientName", t("Kunde"))}
+                  {showClients && heading("clientName", t("Kunde"))}
                   {heading("name", t("Interessent / Kontakt"))}
                   {heading("status", t("Dealphase"))}
                   <th>{t("Kontaktdaten")}</th>
@@ -289,7 +292,7 @@ export function Leads({
               <tbody>
                 {filtered.map((l) => (
                   <tr key={l.id}>
-                    {isAdmin && (
+                    {showClients && (
                       <td>
                         <span className="client-chip">{value(l.clientName)}</span>
                       </td>
@@ -337,7 +340,7 @@ export function Leads({
                   <Badge status={l.status} />
                 </div>
                 <dl>
-                  {isAdmin && (
+                  {showClients && (
                     <div className="wide">
                       <dt>{t("Kunde")}</dt>
                       <dd>

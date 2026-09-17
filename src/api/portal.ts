@@ -21,12 +21,15 @@ export type Lead = {
   clientName: string | null;
 };
 export type BootstrapResponse = {
+  sessionKey?: string;
   mode: PortalMode;
   customer: { name: string };
   clients: PortalClient[];
   leads: Lead[];
 };
 export type ErrorCode =
+  | "ls-required"
+  | "not-provisioned"
   | "invalid-link"
   | "configuration"
   | "rate-limit"
@@ -87,7 +90,7 @@ function parseResponse(v: unknown): BootstrapResponse {
   const clients: PortalClient[] = [];
   const clientById = new Map<string, PortalClient>();
 
-  if (mode === "admin") {
+  if (mode === "admin" || (Array.isArray(v.clients) && v.clients.length > 0)) {
     if (!Array.isArray(v.clients) || v.clients.length > 10000)
       throw new PortalError("service");
     for (const raw of v.clients) {
@@ -128,7 +131,7 @@ function parseResponse(v: unknown): BootstrapResponse {
     } as Lead;
     for (const key of optional) lead[key] = nullableString(r[key]);
 
-    if (mode === "admin") {
+    if (mode === "admin" || clients.length > 0) {
       if (
         typeof r.clientRecordId !== "string" ||
         !recordId.test(r.clientRecordId) ||
@@ -145,7 +148,8 @@ function parseResponse(v: unknown): BootstrapResponse {
     return lead;
   });
 
-  return { mode, customer: { name: v.customer.name }, clients, leads };
+  if (v.sessionKey !== undefined && (typeof v.sessionKey !== 'string' || !/^[a-f0-9]{64}$/.test(v.sessionKey))) throw new PortalError('service');
+  return { mode, customer: { name: v.customer.name }, clients, leads, ...(v.sessionKey ? {sessionKey:v.sessionKey as string} : {}) };
 }
 
 export async function bootstrap(
@@ -192,5 +196,27 @@ export async function bootstrap(
     if (timeout.aborted) throw new PortalError("timeout");
     if (e instanceof PortalError) throw e;
     throw new PortalError("service");
+  }
+}
+
+/** LS tokens go only to the endpoint that verifies them with LearningSuite. */
+export async function bootstrapLearningSuite(token: string, signal?: AbortSignal): Promise<BootstrapResponse> {
+  const timeout = AbortSignal.timeout(20000);
+  try {
+    const response = await fetch('https://zwtmlrzwqnluosrdbjfv.supabase.co/functions/v1/portal-session', {
+      method:'GET', headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},
+      credentials:'omit',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer',
+      signal:signal?AbortSignal.any([signal,timeout]):timeout,
+    });
+    if(response.status===401) throw new PortalError('ls-required');
+    if(response.status===403) throw new PortalError('not-provisioned');
+    if(response.status===429) throw new PortalError('rate-limit');
+    if(!response.ok) throw new PortalError('service');
+    return parseResponse(await response.json());
+  } catch(error) {
+    if(signal?.aborted) throw signal.reason;
+    if(timeout.aborted) throw new PortalError('timeout');
+    if(error instanceof PortalError) throw error;
+    throw new PortalError('service');
   }
 }
