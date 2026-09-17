@@ -78,3 +78,13 @@ test('actual parent bridge never reuses an old pending token for a new request',
  await page.evaluate(()=>{(window as any).releaseToken()});
  await expect(app.getByRole('cell',{name:'Alpha —',exact:true})).toHaveCount(0);
 });
+
+test('portal bridge waits for LearningSuite authManager initialization',async({page})=>{
+ await proxyApp(page);
+ await page.routeWebSocket('wss://*.supabase.co/**',()=>{});
+ await page.route(endpoint,route=>route.fulfill({json:response('a','Alpha')}));
+ const html=await readFile('integrations/learningsuite-client-portal.html','utf8');
+ await page.route(parent+'/**',route=>route.fulfill({contentType:'text/html',body:`<script>setTimeout(()=>{window.authManager={getAccessToken:()=> 'token-A'}},300)</script>${html}`}));
+ await page.goto(parent+'/portal-test');
+ await expect(page.frameLocator('iframe').getByRole('cell',{name:'Alpha —',exact:true})).toBeVisible();
+});

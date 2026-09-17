@@ -4,6 +4,8 @@ Shared iframe URL: `https://schulze-client-portal-production.up.railway.app/`
 
 ## Install the parent bridge
 
+For an LS HTML block that allows scripts in the immediate parent document, paste `integrations/learningsuite-client-portal.html`. It includes both the portal iframe and its matching bridge. If LS strips or isolates scripts, use the iframe in the content block and install the JavaScript in tenant Custom Code instead. Do not reuse the Welcome Form URL or its iframe attribute selector for this portal.
+
 In Schulze LearningSuite tenant Custom Code, append the contents of `integrations/learningsuite-parent-bridge.js` inside a `<script>` element if the editor expects HTML. Keep the existing Welcome Form bridge. This portal bridge has its own cleanup handler and allows only the exact portal iframe origin, URL and window.
 
 Embed the shared URL directly as an iframe, with no token or client/email query parameters. The immediate parent must run the bridge and expose LearningSuite's `authManager.getAccessToken()`. Reload the full LS page after installing the code. An embed wrapper or proxy domain must not be substituted without an explicit integration.
