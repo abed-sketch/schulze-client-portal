@@ -36,3 +36,7 @@ Repository tests cover mocked LS iframe behavior; they do not establish that the
 - LS tenant bridge installation and real-account iframe acceptance require a signed-in tenant settings session; not yet verified.
 
 Validation completed: 35 unit tests and 16 browser tests; TypeScript and production build pass. Browser tests use the actual parent bridge with a mocked identity provider, including delayed old-account token acquisition and delayed old-account API responses. Live database checks confirm IT=3 leads, second assigned client=3, Abed=9 across 3 clients, unknown email denied. Rolled-back probes confirm multi-client scope=6 of 9 leads, admin revocation denied, and stale snapshot denied. Forced RLS and service-only RPC/table access verified.
+
+## Airtable-managed access
+
+The five-minute sync now discovers a `Portal Access` table automatically. See [the Omni prompt and access rules](portal-access-omni-prompt.md). Once that table is detected, it replaces the Supabase admin allowlist as the source of explicit Admin and additional Client grants. Primary Contact access remains automatic. Editing this table must be restricted to trusted internal administrators.

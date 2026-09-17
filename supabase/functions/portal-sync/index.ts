@@ -88,9 +88,14 @@ Deno.serve(async (req: Request) => {
     if (input.clients.length > 10000 || input.leads.length > 100000) throw new Error("invalid_payload");
     const safeDiagnostics = diagnostics(input.diagnostics);
 
-    const { data, error } = await supabase.rpc("portal_replace_snapshot", {
+    // Transitional old writers may update data, but cannot refresh access freshness.
+    const hasAccess = Object.prototype.hasOwnProperty.call(input, "accessStatus");
+    if (hasAccess && (!Array.isArray(input.access) || input.access.length > 10000 ||
+        !["missing", "invalid", "ready"].includes(String(input.accessStatus)))) throw new Error("invalid_access");
+    const { data, error } = await supabase.rpc(hasAccess ? "portal_replace_snapshot_with_access" : "portal_replace_snapshot", {
       p_clients: input.clients,
       p_leads: input.leads,
+      ...(hasAccess ? { p_access: input.access, p_access_status: input.accessStatus, p_access_table_id: input.accessTableId ?? null, p_snapshot_started_at: input.snapshotStartedAt ?? null } : {}),
     });
     if (error) throw error;
 
@@ -100,8 +105,11 @@ Deno.serve(async (req: Request) => {
       .lt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
     return json({ ok: true, snapshot: data, diagnostics: safeDiagnostics });
-  } catch {
-    console.error("portal-sync failed");
-    return json({ error: "sync_failed" }, 400);
+  } catch (error) {
+    // SQL/PostgREST codes are safe operational metadata; never log rows or credentials.
+    const candidate = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    const code = /^[A-Z0-9]{5,10}$/.test(candidate) ? candidate : "SYNC_FAILED";
+    console.error("portal-sync failed", code);
+    return json({ error: "sync_failed", code }, 400);
   }
 });

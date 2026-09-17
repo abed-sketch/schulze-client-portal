@@ -1,4 +1,4 @@
-import { workflow, node, trigger, newCredential, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, ifElse, newCredential, expr } from '@n8n/workflow-sdk';
 
 const manual = trigger({
   type: 'n8n-nodes-base.manualTrigger',
@@ -93,6 +93,24 @@ const people = node({
   output: [{ id: 'recDDDDDDDDDDDDDD', fields: { 'Full Name': 'Example' } }],
 });
 
+// BEGIN GENERATED ACCESS NODES
+const snapshotStart = node({type:'n8n-nodes-base.code',version:2,config:{name:'Begin ordered portal snapshot',position:[150,220],parameters:{mode:'runOnceForAllItems',language:'javaScript',jsCode:'return [{json:{snapshotStartedAt:new Date().toISOString()}}];'}},output:[{snapshotStartedAt:'2026-09-17T00:00:00.000Z'}]});
+const accessSchema = node({
+ type:'n8n-nodes-base.httpRequest',version:4.5,
+ config:{name:'Discover portal access schema',executeOnce:true,position:[1340,220],
+  parameters:{method:'GET',url:'https://api.airtable.com/v0/meta/bases/appAutw0Fvsuk2pfJ/tables',authentication:'predefinedCredentialType',nodeCredentialType:'airtableTokenApi',options:{redirect:{redirect:{followRedirects:false}},response:{response:{responseFormat:'json'}},timeout:20000}},
+  credentials:{airtableTokenApi:airtable}},output:[{tables:[]}]});
+const accessDiscovery = node({type:'n8n-nodes-base.code',version:2,
+ config:{name:'Validate portal access schema',position:[1600,220],parameters:{mode:'runOnceForAllItems',language:'javaScript',jsCode:"const discoverPortalAccess = function discoverPortalAccess(schema) {\n  if (!schema || !Array.isArray(schema.tables)) throw new Error('portal_schema_read_invalid');\n  const matches = schema.tables.filter(t => t.name === 'Portal Access');\n  if (!matches.length) return { status: 'missing', tableId: null };\n  const table = matches[0];\n  const invalid = { status: 'invalid', tableId: /^tbl[A-Za-z0-9]{14}$/.test(table.id) ? table.id : null };\n  if (matches.length !== 1 || !invalid.tableId || !Array.isArray(table.fields)) return invalid;\n  const field = name => table.fields.filter(f => f.name === name);\n  const exactly = (name, type) => field(name).length === 1 && field(name)[0].type === type;\n  if (!exactly('Email', 'email') || !exactly('Role', 'singleSelect') ||\n      !exactly('Active', 'checkbox') || !exactly('Client', 'multipleRecordLinks')) return invalid;\n  const choices = field('Role')[0].options?.choices?.map(c => c.name).sort();\n  const link = field('Client')[0].options;\n  if (JSON.stringify(choices) !== '[\"Admin\",\"Client\"]' ||\n      link?.linkedTableId !== 'tblfPwZLXgjYuFMsc' || link?.prefersSingleRecordLink !== true) return invalid;\n  return { status: 'ready', tableId: table.id };\n};\nreturn [{json:discoverPortalAccess($input.first().json)}];"}},
+ output:[{status:'ready',tableId:'tblAAAAAAAAAAAAAA'}]});
+const accessReady = ifElse({version:2.2,config:{name:'Portal access table ready',position:[1860,220],parameters:{conditions:{options:{caseSensitive:true,leftValue:'',typeValidation:'strict'},conditions:[{leftValue:expr('{{ $json.status }}'),operator:{type:'string',operation:'equals'},rightValue:'ready'}],combinator:'and'},options:{}}}});
+const accessRows = node({type:'n8n-nodes-base.airtable',version:2.2,
+ config:{name:'Read portal access',executeOnce:true,alwaysOutputData:true,position:[2120,120],
+  notes:'Read all pages, including inactive grants. Empty success deliberately revokes all explicit grants; API failures stop before replacement.',
+  parameters:{authentication:'airtableTokenApi',base,resource:'record',operation:'search',table:{__rl:true,mode:'id',value:expr('{{ $json.tableId }}')},returnAll:true,options:{fields:['Email','Role','Client','Active']}},
+  credentials:{airtableTokenApi:airtable}},output:[{}]});
+// END GENERATED ACCESS NODES
+
 const buildSnapshot = node({
   type: 'n8n-nodes-base.code', version: 2,
   config: {
@@ -116,9 +134,47 @@ for(const row of targetRows){const f=field(row),owners=links(f.Client,100),owner
 const normalizedLeads=[];let skippedLeads=0;
 for(const row of leadRows){const f=field(row),targetIds=links(f['Target Company'],100),targetId=targetIds.length===1?targetIds[0]:null,target=targetId?targetById.get(targetId):null;if(!target||!target.leadIds.has(row.id)){skippedLeads++;continue;}const personIds=links(f['Linked Person'],100);if(personIds.length>1){skippedLeads++;continue;}const requested=personIds[0]||null,p=requested?personById.get(requested):null,personId=p?requested:null,leadName=text(f['Lead Name'],10000)||text(p&&p['Full Name'],10000)||'Unbenannter Interessent';normalizedLeads.push({airtableLeadId:row.id,airtableClientId:target.clientId,airtableTargetCompanyId:targetId,airtablePersonId:personId,leadName,contactName:text(p&&p['Full Name'],10000),status:text(f['Lead Status'],10000),website:target.website,notes:text(f.Notes),email:text(p&&p.Email,10000),phone:text(p&&p.Phone,10000),position:text(p&&p['Role/Title'],10000),source:text(f.Source,10000),sourceUpdatedAt:null});}
 normalizedLeads.sort((a,b)=>a.airtableLeadId.localeCompare(b.airtableLeadId));
-return [{json:{clients,leads:normalizedLeads,diagnostics:{clientsScanned:clientRows.length,targetsScanned:targetRows.length,leadsScanned:leadRows.length,peopleScanned:personRows.length,clientsIncluded:clients.length,leadsIncluded:normalizedLeads.length,skippedTargets,skippedLeads}}}];`,
+// BEGIN GENERATED ACCESS LOGIC
+const normalizePortalAccess = function normalizePortalAccess(rows, clientIds) {
+  if (!Array.isArray(rows) || rows.length > 10000) throw new Error('portal_access_limit');
+  const clients = new Set(clientIds), ids = new Set(), groups = new Map();
+  let scanned = 0, invalid = 0;
+  for (const row of rows) {
+    // n8n emits one empty object for a successfully read, empty table.
+    if (row && typeof row === 'object' && !Array.isArray(row) && !Object.keys(row).length) continue;
+    scanned++;
+    if (!row || !/^rec[A-Za-z0-9]{14}$/.test(row.id) || ids.has(row.id)) throw new Error('portal_access_record_invalid');
+    ids.add(row.id);
+    const f = row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields : row;
+    const email = typeof f.Email === 'string' ? f.Email.trim().toLowerCase() : '';
+    const linked = f.Client == null ? [] : f.Client;
+    if (email.length > 254 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) ||
+        !['Admin', 'Client'].includes(f.Role) || !Array.isArray(linked) ||
+        (f.Role === 'Admin' ? linked.length !== 0 : linked.length !== 1 || !clients.has(linked[0])) ||
+        (f.Active != null && typeof f.Active !== 'boolean')) { invalid++; continue; }
+    const clientId = f.Role === 'Client' ? linked[0] : null;
+    const key = JSON.stringify([email, f.Role, clientId]);
+    const group = groups.get(key) || [];
+    group.push({ airtableAccessId: row.id, email, role: f.Role, clientId, active: f.Active === true });
+    groups.set(key, group);
+  }
+  const access = [];
+  let duplicates = 0;
+  for (const group of groups.values()) {
+    if (group.length !== 1) { duplicates += group.length; continue; }
+    access.push(group[0]);
+  }
+  access.sort((a, b) => a.airtableAccessId.localeCompare(b.airtableAccessId));
+  return { access, accessDiagnostics: { scanned, invalid, duplicates, included: access.length } };
+};
+const snapshotStartedAt=$('Begin ordered portal snapshot').first().json.snapshotStartedAt;
+const discovery=$('Validate portal access schema').first().json;
+const accessInput=discovery.status==='ready'?$('Read portal access').all().map(i=>i.json):[];
+const {access,accessDiagnostics}=normalizePortalAccess(accessInput,clients.map(c=>c.airtableClientId));
+// END GENERATED ACCESS LOGIC
+return [{json:{clients,leads:normalizedLeads,access,accessDiagnostics,snapshotStartedAt,accessStatus:discovery.status,accessTableId:discovery.tableId,diagnostics:{clientsScanned:clientRows.length,targetsScanned:targetRows.length,leadsScanned:leadRows.length,peopleScanned:personRows.length,clientsIncluded:clients.length,leadsIncluded:normalizedLeads.length,skippedTargets,skippedLeads}}}];`,
     },
-    position: [1340, 220],
+    position: [2380, 220],
   },
   output: [{ clients: [], leads: [], diagnostics: { clientsScanned: 0, targetsScanned: 0, leadsScanned: 0, peopleScanned: 0, clientsIncluded: 0, leadsIncluded: 0, skippedTargets: 0, skippedLeads: 0 } }],
 });
@@ -139,7 +195,7 @@ const replaceSnapshot = node({
       },
     },
     credentials: { httpBearerAuth: internalBearer },
-    position: [1600, 220],
+    position: [2640, 220],
   },
   output: [{ ok: true, snapshot: { clients: 0, leads: 0, deletedClients: 0, deletedLeads: 0 }, diagnostics: {} }],
 });
@@ -157,12 +213,14 @@ for(const key of ['clients','leads','deletedClients','deletedLeads'])if(!nonNega
 for(const key of ['clientsScanned','targetsScanned','leadsScanned','peopleScanned','clientsIncluded','leadsIncluded','skippedTargets','skippedLeads'])if(!nonNegative(value.diagnostics[key]))throw new Error('portal_sync_failed');
 return [{json:{ok:true,snapshot:value.snapshot,diagnostics:value.diagnostics}}];`,
     },
-    position: [1860, 220],
+    position: [2900, 220],
   },
   output: [{ ok: true, snapshot: {}, diagnostics: {} }],
 });
 
 export default workflow('schulze-portal-airtable-supabase-sync', 'Schulze Portal · Airtable → Supabase sync')
-  .add(manual).to(clients)
-  .add(schedule).to(clients)
-  .add(clients).to(targets).to(leads).to(people).to(buildSnapshot).to(replaceSnapshot).to(validateAck);
+  .add(manual).to(snapshotStart)
+  .add(schedule).to(snapshotStart)
+  .add(snapshotStart).to(clients)
+  .add(clients).to(targets).to(leads).to(people).to(accessSchema).to(accessDiscovery).to(accessReady.onTrue(accessRows.to(buildSnapshot)).onFalse(buildSnapshot))
+  .add(buildSnapshot).to(replaceSnapshot).to(validateAck);
