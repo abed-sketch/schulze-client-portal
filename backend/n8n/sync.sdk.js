@@ -18,8 +18,8 @@ const schedule = trigger({
   output: [{}],
 });
 
-const airtable = newCredential('Schulze x Apex Airtable');
-const internalBearer = newCredential('Bearer Auth account');
+const airtable = newCredential('Schulze x Apex Airtable', 'oun3u0zdIMOShiCK');
+const internalBearer = newCredential('Schulze Portal Supabase', 'MpEnClmtG7bhzNBS');
 const base = { __rl: true, mode: 'id', value: 'appAutw0Fvsuk2pfJ' };
 
 const clients = node({

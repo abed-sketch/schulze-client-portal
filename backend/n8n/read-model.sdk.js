@@ -1,7 +1,7 @@
 import { workflow, node, trigger, newCredential, expr } from '@n8n/workflow-sdk';
 
 const portalOrigin = 'https://schulze-client-portal-production.up.railway.app';
-const internalBearer = newCredential('Bearer Auth account');
+const internalBearer = newCredential('Schulze Portal Supabase', 'MpEnClmtG7bhzNBS');
 
 const webhook = trigger({
   type: 'n8n-nodes-base.webhook',

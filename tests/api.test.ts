@@ -4,6 +4,18 @@ import { readToken, consumeToken } from "../src/api/token.ts";
 import { bootstrap, PortalError } from "../src/api/portal.ts";
 const token = "a".repeat(43);
 const originalFetch = globalThis.fetch;
+test("admin accepts more than 10000 aggregate leads while customers remain capped", async () => {
+  const leads = Array.from({ length: 10001 }, (_, index) => ({
+    id: "lead-" + index, name: "Lead " + index, contactName: null, status: null,
+    website: null, notes: null, email: null, phone: null, position: null, source: null,
+    clientRecordId: "recAAAAAAAAAAAAAA", clientName: "Alpha",
+  }));
+  globalThis.fetch = async () => Response.json({ mode: "admin", customer: { name: "Team" },
+    clients: [{ id: "recAAAAAAAAAAAAAA", clientId: null, name: "Alpha" }], leads });
+  assert.equal((await bootstrap("https://api.test", token)).leads.length, 10001);
+  globalThis.fetch = async () => Response.json({ mode: "customer", customer: { name: "Alpha" }, leads });
+  await assert.rejects(bootstrap("https://api.test", token), isCode("service"));
+});
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });

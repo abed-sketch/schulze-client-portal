@@ -8,9 +8,11 @@ Frontend implemented and deployed at `https://schulze-client-portal-production.u
 
 The provisioning policy currently uses a 365-day portal-grant expiry. If Hub creation becomes uncertain after issuance, automatic re-issuance is blocked for manual reconciliation instead of silently creating another customer link. Existing LearningSuite Hubs are reused, but the documented LearningSuite API does not expose a creation-variable update endpoint; an existing Hub without the secure portal URL is therefore marked `Needs Migration` rather than mutated through an invented API contract.
 
-No real customer onboarding or token-bearing end-to-end run was executed as part of this integration update. Railway runtime variables/security headers and the real LearningSuite iframe still need a final browser-side verification before calling the deployment fully verified. See `backend/n8n/README.md` for exact live workflow state and the release test checklist.
+The Airtable → Supabase snapshot workflow is active every five minutes, and the bearer-authorized bootstrap API now reads the private Supabase model. The dedicated n8n credential was verified with live writes and customer/admin reads. Restricted team access is issued manually with a 24-hour expiry. The frontend refreshes through non-sensitive Supabase invalidation events, with a 60-second polling fallback and refresh on focus. See `docs/portal-supabase-sync.md` for operator instructions and verification evidence.
 
-Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. Read-only record inspection returned **0 Leads and 0 Target Companies** at that time. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
+No real customer onboarding or new production grant was issued during this cutover. The real LearningSuite customer iframe and populated two-customer isolation remain operator acceptance checks; automated browser tests use synthetic fixtures.
+
+Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. The latest read-only inspection found **one test client (APEX Test), three Leads, and three Target Companies without Client ownership**. The portal correctly contains zero leads until those ownership links are assigned. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
 
 ## Local development
 
@@ -44,7 +46,9 @@ Authorization: `Bearer <43-character base64url opaque token>` (at least 256 bits
 
 ```ts
 type BootstrapResponse = {
+  mode: "customer" | "admin";
   customer: { name: string };
+  clients?: Array<{ id: string; clientId: string | null; name: string }>; // Admin only
   leads: Array<{
     id: string; // Portal-facing, no raw Airtable ID needed
     name: string;
@@ -56,11 +60,13 @@ type BootstrapResponse = {
     phone: string | null;
     position: string | null;
     source: string | null;
+    clientRecordId?: string; // Admin only
+    clientName?: string; // Admin only
   }>;
 };
 ```
 
-Optional values must be `null`, not absent. Unknown fields are dropped, malformed/duplicate lead identifiers reject the whole response. Maximum 10,000 leads per response; the backend rejects oversized datasets rather than silently truncating.
+Optional values must be `null`, not absent. Unknown fields are dropped, malformed/duplicate lead identifiers reject the whole response. Maximum 10,000 customer leads or 100,000 admin leads per response; the backend rejects oversized datasets rather than silently truncating.
 
 Status codes: 401/403 invalid link; 429 rate limit; 5xx service error. No backend error detail is displayed. The API includes the configured portal CORS origin on success, unauthorized and service-error responses.
 
@@ -72,13 +78,14 @@ Production values expected for this deployment:
 VITE_API_BASE_URL=https://automation.schulzemarketing.de/webhook
 API_ORIGIN=https://automation.schulzemarketing.de
 FRAME_ANCESTORS=https://schulze.learningsuite.io
+SUPABASE_ORIGIN=https://zwtmlrzwqnluosrdbjfv.supabase.co
 PORT=8080
 ```
 
 1. Save the variables on the `schulze-client-portal` Railway service, not only in Suggested Variables.
 2. Redeploy after changing `VITE_API_BASE_URL`; Vite embeds it at build time.
 3. Verify `https://schulze-client-portal-production.up.railway.app/healthz` returns 200.
-4. Verify CSP contains `connect-src https://automation.schulzemarketing.de` and `frame-ancestors https://schulze.learningsuite.io` (plus any other real iframe ancestors if LearningSuite nests frames).
+4. Verify CSP allows `https://automation.schulzemarketing.de`, `https://zwtmlrzwqnluosrdbjfv.supabase.co`, and `wss://zwtmlrzwqnluosrdbjfv.supabase.co` in `connect-src` and `frame-ancestors https://schulze.learningsuite.io` (plus any other real iframe ancestors if LearningSuite nests frames).
 5. Verify proxy/CDN access logs redact query strings and Authorization headers before using real bearer links. The included server itself logs only startup, never requests.
 6. Verify the n8n OPTIONS preflight from the portal origin allows GET plus the `Authorization` header.
 
@@ -114,11 +121,11 @@ The raw token exists only in the in-memory provisioning path long enough to crea
 
 ## Security and limitations
 
-- No Airtable PAT, n8n integration credential, Supabase, direct browser Airtable calls or customer navigation.
+- No Airtable PAT, n8n integration credential, or Supabase privileged key in the browser. The public Supabase key can read only non-sensitive invalidation events. Lead data always passes through the bearer-authorized API.
 - Customer token is held in memory only. Query and fragment are removed on startup. Reloading the cleaned URL requires reopening the original LS link.
 - The initial token-bearing URL reaches the host/proxy before JavaScript executes. Infrastructure log redaction is mandatory; frontend URL cleanup does not solve server logs.
 - Bearer links can be shared. They are not LearningSuite SSO. Expiration and immediate revocation are backend requirements.
-- CSP permits only configured API origin and LS ancestors. No analytics, third-party fonts, scripts or images.
+- CSP permits configured API/realtime origins and LS ancestors. No analytics, third-party fonts, scripts or images.
 - No local/session storage, cookies or service worker. No customer response cache.
 - `backend/ownership.ts` is a tested server-side reference, not a deployed authorization service. It is never imported into React.
 

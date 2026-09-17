@@ -1,4 +1,7 @@
 import { test, expect } from "@playwright/test";
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket("wss://*.supabase.co/**", () => {});
+});
 const token = "a".repeat(43);
 const lead = (id: string, name: string, status: string) => ({
   id,
@@ -21,6 +24,45 @@ const payload = {
     lead("4", "Westfeld Engineering", "Gewonnen"),
   ],
 };
+
+test("realtime invalidation refreshes through the authorized API without reloading", async ({ page }) => {
+  let current = payload;
+  let invalidate: (() => void) | undefined;
+  await page.routeWebSocket("wss://*.supabase.co/**", socket => {
+    socket.onMessage(() => {});
+    invalidate = () => socket.send(JSON.stringify({
+      event: "postgres_changes", topic: "realtime:public:portal_events", payload: {},
+    }));
+  });
+  await page.route("https://portal-api.test/**", route => {
+    expect(route.request().headers().authorization).toBe("Bearer " + token);
+    return route.fulfill({ json: current });
+  });
+  await page.goto("/?token=" + token);
+  await expect(page.locator("tbody tr")).toHaveCount(4);
+  current = { ...payload, leads: [...payload.leads, lead("5", "Realtime lead", "Neu")] };
+  await expect.poll(() => typeof invalidate).toBe("function");
+  invalidate!();
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+});
+
+test("open portal refreshes in the background and removes data after revocation", async ({ page }) => {
+  await page.clock.install();
+  let revoked = false;
+  let current = payload;
+  await page.route("https://portal-api.test/**", route => revoked
+    ? route.fulfill({ status: 401, json: { error: "unauthorized" } })
+    : route.fulfill({ json: current }));
+  await page.goto("/?token=" + token);
+  await expect(page.locator("tbody tr")).toHaveCount(4);
+  current = { ...payload, leads: [...payload.leads, lead("5", "Newly synced lead", "Neu")] };
+  await page.clock.runFor(61000);
+  await expect(page.locator("tbody tr")).toHaveCount(5);
+  revoked = true;
+  await page.clock.runFor(61000);
+  await expect(page.getByRole("heading", { name: "Dieser Link ist nicht gültig" })).toBeVisible();
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+});
 
 test("desktop search, filter, sorting and safe token transport", async ({ page }) => {
   const errors: string[] = [];
