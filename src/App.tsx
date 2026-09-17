@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   bootstrap,
   PortalError,
   type BootstrapResponse,
   type ErrorCode,
 } from "./api/portal";
+import { subscribePortalInvalidations } from "./api/realtime";
 import { Leads } from "./components/Leads";
 type State =
   | { kind: "loading" }
@@ -37,10 +38,12 @@ export function App({ token }: { token: string | null }) {
     token ? { kind: "loading" } : { kind: "error", code: "invalid-link" },
   );
   const [attempt, setAttempt] = useState(0);
+  const realtimeDebounce = useRef<number | undefined>(undefined);
+
   useEffect(() => {
     if (!token) return;
     const c = new AbortController();
-    setState({ kind: "loading" });
+    setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
     bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, c.signal)
       .then((data) => {
         if (!c.signal.aborted) setState({ kind: "ready", data });
@@ -54,6 +57,28 @@ export function App({ token }: { token: string | null }) {
       });
     return () => c.abort();
   }, [token, attempt]);
+
+  useEffect(() => {
+    if (!token) return;
+    const unsubscribe = subscribePortalInvalidations({
+      url: import.meta.env.VITE_SUPABASE_URL || "",
+      publishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "",
+      onInvalidate: () => {
+        if (realtimeDebounce.current !== undefined)
+          window.clearTimeout(realtimeDebounce.current);
+        realtimeDebounce.current = window.setTimeout(
+          () => setAttempt((value) => value + 1),
+          350,
+        );
+      },
+    });
+    return () => {
+      if (realtimeDebounce.current !== undefined)
+        window.clearTimeout(realtimeDebounce.current);
+      unsubscribe();
+    };
+  }, [token]);
+
   return (
     <>
       <a className="skip-link" href="#main">
@@ -77,7 +102,11 @@ export function App({ token }: { token: string | null }) {
             {state.kind === "ready"
               ? state.data.customer.name
               : "Ihr Kundenportal"}
-            <small>Persönlicher Bereich</small>
+            <small>
+              {state.kind === "ready" && state.data.mode === "admin"
+                ? "Schulze Teamansicht"
+                : "Persönlicher Bereich"}
+            </small>
           </span>
         </div>
       </header>
@@ -94,7 +123,9 @@ export function App({ token }: { token: string | null }) {
               <br className="heading-break" /> Möglichkeiten<span>.</span>
             </h1>
             <p>
-              Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand.
+              {state.kind === "ready" && state.data.mode === "admin"
+                ? "Alle Kunden-Interessenten. Zentral im Blick. Immer auf dem aktuellen Stand."
+                : "Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand."}
             </p>
           </div>
           <div className="heading-symbol" aria-hidden="true">
@@ -103,7 +134,7 @@ export function App({ token }: { token: string | null }) {
           </div>
         </div>
         {state.kind === "ready" ? (
-          <Leads leads={state.data.leads} />
+          <Leads leads={state.data.leads} admin={state.data.mode === "admin"} />
         ) : state.kind === "loading" ? (
           <section
             className="loading leads-panel"
@@ -141,7 +172,11 @@ export function App({ token }: { token: string | null }) {
         <footer>
           <span>SCHULZE MARKETING</span>
           <p>Ihr Vertrieb. Unser gemeinsamer Fortschritt.</p>
-          <span className="footer-private">Persönlicher Kundenbereich</span>
+          <span className="footer-private">
+            {state.kind === "ready" && state.data.mode === "admin"
+              ? "Interne Schulze-Teamansicht"
+              : "Persönlicher Kundenbereich"}
+          </span>
         </footer>
       </main>
     </>
