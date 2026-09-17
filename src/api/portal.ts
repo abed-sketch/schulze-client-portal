@@ -1,4 +1,11 @@
 import { TOKEN_PATTERN } from "./token.ts";
+
+export type PortalMode = "customer" | "admin";
+export type PortalClient = {
+  id: string;
+  clientId: string | null;
+  name: string;
+};
 export type Lead = {
   id: string;
   name: string;
@@ -10,10 +17,22 @@ export type Lead = {
   phone: string | null;
   position: string | null;
   source: string | null;
+  clientRecordId: string | null;
+  clientName: string | null;
 };
-export type BootstrapResponse = { customer: { name: string }; leads: Lead[] };
+export type BootstrapResponse = {
+  mode: PortalMode;
+  customer: { name: string };
+  clients: PortalClient[];
+  leads: Lead[];
+};
 export type ErrorCode =
-  "invalid-link" | "configuration" | "rate-limit" | "service" | "timeout";
+  | "invalid-link"
+  | "configuration"
+  | "rate-limit"
+  | "service"
+  | "timeout";
+
 export class PortalError extends Error {
   code: ErrorCode;
   constructor(code: ErrorCode) {
@@ -22,6 +41,8 @@ export class PortalError extends Error {
     this.code = code;
   }
 }
+
+const recordId = /^rec[A-Za-z0-9]{14}$/;
 const optional = [
   "contactName",
   "status",
@@ -32,9 +53,17 @@ const optional = [
   "position",
   "source",
 ] as const;
+
 function record(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
+
+function nullableString(v: unknown, max = 100000): string | null {
+  if (v === null) return null;
+  if (typeof v !== "string" || v.length > max) throw new PortalError("service");
+  return v;
+}
+
 function parseResponse(v: unknown): BootstrapResponse {
   if (
     !record(v) ||
@@ -45,8 +74,40 @@ function parseResponse(v: unknown): BootstrapResponse {
     v.leads.length > 10000
   )
     throw new PortalError("service");
+
+  const mode: PortalMode =
+    v.mode === undefined
+      ? "customer"
+      : v.mode === "customer" || v.mode === "admin"
+        ? v.mode
+        : (() => {
+            throw new PortalError("service");
+          })();
+  const clients: PortalClient[] = [];
+  const clientById = new Map<string, PortalClient>();
+
+  if (mode === "admin") {
+    if (!Array.isArray(v.clients) || v.clients.length > 10000)
+      throw new PortalError("service");
+    for (const raw of v.clients) {
+      if (
+        !record(raw) ||
+        typeof raw.id !== "string" ||
+        !recordId.test(raw.id) ||
+        clientById.has(raw.id) ||
+        typeof raw.name !== "string" ||
+        !raw.name.trim()
+      )
+        throw new PortalError("service");
+      const clientId = nullableString(raw.clientId, 200);
+      const client = { id: raw.id, clientId, name: raw.name };
+      clients.push(client);
+      clientById.set(client.id, client);
+    }
+  }
+
   const ids = new Set<string>();
-  const leads = v.leads.map((r: unknown) => {
+  const leads = v.leads.map((r: unknown): Lead => {
     if (
       !record(r) ||
       typeof r.id !== "string" ||
@@ -57,16 +118,35 @@ function parseResponse(v: unknown): BootstrapResponse {
     )
       throw new PortalError("service");
     ids.add(r.id);
-    const lead = { id: r.id, name: r.name } as Lead;
-    for (const key of optional) {
-      if (r[key] !== null && typeof r[key] !== "string")
+
+    const lead = {
+      id: r.id,
+      name: r.name,
+      clientRecordId: null,
+      clientName: null,
+    } as Lead;
+    for (const key of optional) lead[key] = nullableString(r[key]);
+
+    if (mode === "admin") {
+      if (
+        typeof r.clientRecordId !== "string" ||
+        !recordId.test(r.clientRecordId) ||
+        typeof r.clientName !== "string" ||
+        !r.clientName.trim()
+      )
         throw new PortalError("service");
-      lead[key] = r[key] as string | null;
+      const client = clientById.get(r.clientRecordId);
+      if (!client || client.name !== r.clientName)
+        throw new PortalError("service");
+      lead.clientRecordId = r.clientRecordId;
+      lead.clientName = r.clientName;
     }
     return lead;
   });
-  return { customer: { name: v.customer.name }, leads };
+
+  return { mode, customer: { name: v.customer.name }, clients, leads };
 }
+
 export async function bootstrap(
   base: string,
   token: string,
@@ -88,7 +168,8 @@ export async function bootstrap(
   }
   if (!TOKEN_PATTERN.test(token)) throw new PortalError("invalid-link");
   signal?.throwIfAborted();
-  url.pathname = url.pathname.replace(/\/$/, "") + "/customer-portal/bootstrap";
+  url.pathname =
+    url.pathname.replace(/\/$/, "") + "/customer-portal/bootstrap";
   const timeout = AbortSignal.timeout(25000);
   try {
     const response = await fetch(url, {
