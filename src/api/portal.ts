@@ -10,10 +10,21 @@ export type Lead = {
   phone: string | null;
   position: string | null;
   source: string | null;
+  clientRecordId?: string;
+  clientName?: string;
 };
-export type BootstrapResponse = { customer: { name: string }; leads: Lead[] };
+export type BootstrapResponse = {
+  mode: "customer" | "admin";
+  customer: { name: string };
+  leads: Lead[];
+  clients?: { id: string; clientId: string | null; name: string }[];
+};
 export type ErrorCode =
-  "invalid-link" | "configuration" | "rate-limit" | "service" | "timeout";
+  | "invalid-link"
+  | "configuration"
+  | "rate-limit"
+  | "service"
+  | "timeout";
 export class PortalError extends Error {
   code: ErrorCode;
   constructor(code: ErrorCode) {
@@ -45,6 +56,7 @@ function parseResponse(v: unknown): BootstrapResponse {
     v.leads.length > 10000
   )
     throw new PortalError("service");
+  const mode = v.mode === "admin" ? "admin" : "customer";
   const ids = new Set<string>();
   const leads = v.leads.map((r: unknown) => {
     if (
@@ -63,9 +75,45 @@ function parseResponse(v: unknown): BootstrapResponse {
         throw new PortalError("service");
       lead[key] = r[key] as string | null;
     }
+    if (mode === "admin") {
+      if (
+        typeof r.clientRecordId !== "string" ||
+        !/^rec[A-Za-z0-9]{14}$/.test(r.clientRecordId) ||
+        typeof r.clientName !== "string" ||
+        !r.clientName.trim()
+      )
+        throw new PortalError("service");
+      lead.clientRecordId = r.clientRecordId;
+      lead.clientName = r.clientName;
+    }
     return lead;
   });
-  return { customer: { name: v.customer.name }, leads };
+  let clients: BootstrapResponse["clients"];
+  if (mode === "admin") {
+    if (!Array.isArray(v.clients) || v.clients.length > 5000)
+      throw new PortalError("service");
+    clients = v.clients.map((client) => {
+      if (
+        !record(client) ||
+        typeof client.id !== "string" ||
+        !/^rec[A-Za-z0-9]{14}$/.test(client.id) ||
+        typeof client.name !== "string" ||
+        !client.name.trim() ||
+        !(
+          client.clientId === null ||
+          client.clientId === undefined ||
+          typeof client.clientId === "string"
+        )
+      )
+        throw new PortalError("service");
+      return {
+        id: client.id,
+        clientId: typeof client.clientId === "string" ? client.clientId : null,
+        name: client.name,
+      };
+    });
+  }
+  return { mode, customer: { name: v.customer.name }, leads, clients };
 }
 export async function bootstrap(
   base: string,
