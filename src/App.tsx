@@ -6,10 +6,13 @@ import {
   type ErrorCode,
 } from "./api/portal";
 import { Leads } from "./components/Leads";
+import "./admin.css";
+
 type State =
   | { kind: "loading" }
   | { kind: "ready"; data: BootstrapResponse }
   | { kind: "error"; code: ErrorCode };
+
 const messages: Record<ErrorCode, [string, string]> = {
   "invalid-link": [
     "Dieser Link ist nicht gültig",
@@ -32,11 +35,13 @@ const messages: Record<ErrorCode, [string, string]> = {
     "Bitte prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
   ],
 };
+
 export function App({ token }: { token: string | null }) {
   const [state, setState] = useState<State>(
     token ? { kind: "loading" } : { kind: "error", code: "invalid-link" },
   );
   const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     if (!token) return;
     const c = new AbortController();
@@ -54,6 +59,10 @@ export function App({ token }: { token: string | null }) {
       });
     return () => c.abort();
   }, [token, attempt]);
+
+  const ready = state.kind === "ready" ? state.data : null;
+  const isAdmin = ready?.mode === "admin";
+
   return (
     <>
       <a className="skip-link" href="#main">
@@ -74,27 +83,38 @@ export function App({ token }: { token: string | null }) {
             ▦
           </span>
           <span>
-            {state.kind === "ready"
-              ? state.data.customer.name
-              : "Ihr Kundenportal"}
-            <small>Persönlicher Bereich</small>
+            {ready ? ready.customer.name : "Ihr Kundenportal"}
+            <small>{isAdmin ? "Schulze Teamansicht" : "Persönlicher Bereich"}</small>
           </span>
         </div>
       </header>
       <main id="main">
         <div className="breadcrumb">
           Vertriebsportal <span aria-hidden="true">/</span>{" "}
-          <strong>Interessenten</strong>
+          <strong>{isAdmin ? "Alle Kunden-Interessenten" : "Interessenten"}</strong>
         </div>
         <div className="page-heading">
           <div>
-            <div className="eyebrow">GEMEINSAM WACHSEN</div>
+            <div className="eyebrow">
+              {isAdmin ? "SCHULZE TEAMANSICHT" : "GEMEINSAM WACHSEN"}
+            </div>
             <h1>
-              Aus Kontakten werden
-              <br className="heading-break" /> Möglichkeiten<span>.</span>
+              {isAdmin ? (
+                <>
+                  Alle Kundenleads
+                  <br className="heading-break" /> im Überblick<span>.</span>
+                </>
+              ) : (
+                <>
+                  Aus Kontakten werden
+                  <br className="heading-break" /> Möglichkeiten<span>.</span>
+                </>
+              )}
             </h1>
             <p>
-              Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand.
+              {isAdmin
+                ? "Kundenübergreifende Leseansicht für das Schulze-Team."
+                : "Ihre Interessenten. Klar im Blick. Immer auf dem aktuellen Stand."}
             </p>
           </div>
           <div className="heading-symbol" aria-hidden="true">
@@ -102,8 +122,8 @@ export function App({ token }: { token: string | null }) {
             <i />
           </div>
         </div>
-        {state.kind === "ready" ? (
-          <Leads leads={state.data.leads} />
+        {ready ? (
+          <Leads mode={ready.mode} clients={ready.clients} leads={ready.leads} />
         ) : state.kind === "loading" ? (
           <section
             className="loading leads-panel"
@@ -141,7 +161,9 @@ export function App({ token }: { token: string | null }) {
         <footer>
           <span>SCHULZE MARKETING</span>
           <p>Ihr Vertrieb. Unser gemeinsamer Fortschritt.</p>
-          <span className="footer-private">Persönlicher Kundenbereich</span>
+          <span className="footer-private">
+            {isAdmin ? "Geschützte Teamansicht" : "Persönlicher Kundenbereich"}
+          </span>
         </footer>
       </main>
     </>
