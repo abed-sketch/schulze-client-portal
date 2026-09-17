@@ -6,6 +6,7 @@ import {
   type ErrorCode,
 } from "./api/portal";
 import { Leads } from "./components/Leads";
+import { subscribePortalInvalidations } from "./api/realtime";
 import "./admin.css";
 
 type State =
@@ -45,19 +46,47 @@ export function App({ token }: { token: string | null }) {
   useEffect(() => {
     if (!token) return;
     const c = new AbortController();
+    let inFlight = false;
+    let revoked = false;
+    let debounce: number | undefined;
     setState({ kind: "loading" });
-    bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, c.signal)
-      .then((data) => {
+    const refresh = async () => {
+      if (inFlight || revoked || c.signal.aborted || document.hidden) return;
+      inFlight = true;
+      try {
+        const data = await bootstrap(import.meta.env.VITE_API_BASE_URL || "", token, c.signal);
         if (!c.signal.aborted) setState({ kind: "ready", data });
-      })
-      .catch((e) => {
-        if (!c.signal.aborted)
-          setState({
-            kind: "error",
-            code: e instanceof PortalError ? e.code : "service",
-          });
-      });
-    return () => c.abort();
+      } catch (e) {
+        if (!c.signal.aborted) {
+          const code = e instanceof PortalError ? e.code : "service";
+          revoked = code === "invalid-link";
+          setState({ kind: "error", code });
+        }
+      } finally {
+        inFlight = false;
+      }
+    };
+    const invalidate = () => {
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => { void refresh(); }, 300);
+    };
+    const unsubscribe = subscribePortalInvalidations({
+      url: import.meta.env.VITE_SUPABASE_URL || "https://zwtmlrzwqnluosrdbjfv.supabase.co",
+      publishableKey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "sb_publishable_OZuJ4MY2fQDjbmgEnzQ_Eg_ux5stSq0",
+      onInvalidate: invalidate,
+    });
+    void refresh();
+    const interval = window.setInterval(() => { void refresh(); }, 60000);
+    window.addEventListener("focus", invalidate);
+    document.addEventListener("visibilitychange", invalidate);
+    return () => {
+      c.abort();
+      unsubscribe();
+      window.clearInterval(interval);
+      window.clearTimeout(debounce);
+      window.removeEventListener("focus", invalidate);
+      document.removeEventListener("visibilitychange", invalidate);
+    };
   }, [token, attempt]);
 
   const ready = state.kind === "ready" ? state.data : null;
@@ -122,8 +151,8 @@ export function App({ token }: { token: string | null }) {
             <i />
           </div>
         </div>
-        {ready ? (
-          <Leads mode={ready.mode} clients={ready.clients} leads={ready.leads} />
+        {state.kind === "ready" ? (
+          <Leads mode={state.data.mode} clients={state.data.clients} leads={state.data.leads} />
         ) : state.kind === "loading" ? (
           <section
             className="loading leads-panel"

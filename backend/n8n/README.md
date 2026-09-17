@@ -4,7 +4,10 @@ Installed on 2026-09-17 in Peer’s personal project. The runtime API and privat
 
 | Component | ID | State |
 | --- | --- | --- |
-| Read customer leads | `qpxbpg33KsqgeiP7` | Published; active version `8152ec0c-bfa7-4860-b005-05c31586fa65` |
+| Read customer leads | `qpxbpg33KsqgeiP7` | Published; Supabase-backed active version `a92b5709-0097-4e8a-b1ed-7f724dcdf5ff` |
+| Airtable → Supabase sync | `m2Yri8eiqX2cO6DD` | Active every five minutes |
+| Issue admin access | `q9UAc79st7JdGU1z` | Manual-only; exact `portal:admin` scope; 24-hour expiry |
+| Verify delivery | `pq4a41K2rl91N1bF` | Manual-only read-only diagnostic; no grant issuance |
 | Issue customer access | `phBJ8osenbUnNCPb` | Published private subworkflow; only FUL-V2-09 may call it |
 | FUL-V2-09 After-Close LearningSuite Provisioning | `yhHEoqYAJGEJ1g0J` | Published with secure portal grant/Hub creation flow; active version `3e371b38-79f6-4ca0-9be3-c894e77f30ae` |
 | FUL-V2-01 New Client Setup | `kQMvqn0fzlEig5tZ` | Published; child payload retention disabled |
@@ -27,11 +30,11 @@ The live webhook/CORS configuration is scoped to:
 
 `https://schulze-client-portal-production.up.railway.app`
 
-The request rejects query selectors and nonempty bodies. SHA-256 lookup must return exactly one unexpired, unrevoked `portal:read` grant. The canonical Airtable client record comes only from that grant. Empty ID sets use `FALSE()`, and exact-ID reads are batched in groups of at most 50.
+The request rejects query selectors and nonempty bodies. SHA-256 lookup must return exactly one unexpired, unrevoked grant. Customer access requires exact `portal:read` scope and the canonical Airtable client record from the grant. Team access requires exact `portal:admin` scope and `__portal_admin__` sentinel. The integration credential is resolved from n8n credentials; portal tokens are not sent to Supabase.
 
-Ownership chain: Clients.Target Companies → Target Companies.Client (exactly this client) → Target Companies.Leads → Leads.Target Company (exactly its validated parent). People are reached only via authorized leads. Missing/conflicting relationships fail closed rather than returning partial data.
+The sync validates reciprocal Client → Target Company → Lead ownership and copies only safely owned records. The read API validates the complete scoped Supabase response. Customer responses are limited to 10,000 leads and admin responses to 100,000; datasets are never silently truncated. Invalid requests/grants return 401; integrity/upstream failures return sanitized 503.
 
-Explicit bounds: 500 target companies and 10,000 leads. Response-local lead IDs are used instead of exposing Airtable record IDs. HTTP 401 covers invalid requests/grants; integrity/upstream failures return sanitized 503.
+See [Supabase delivery runbook](../../docs/portal-supabase-sync.md) for current runtime evidence, admin operation, and source-data gaps.
 
 Workflow privacy settings remain:
 
@@ -103,7 +106,7 @@ Changing `VITE_API_BASE_URL` requires a rebuild/redeploy because Vite embeds it 
 Before calling the deployment fully verified, check from a normal browser/network that:
 
 1. `/healthz` returns 200.
-2. Portal CSP has `connect-src https://automation.schulzemarketing.de`.
+2. Portal CSP permits the n8n HTTPS origin and the Supabase project HTTPS/WSS origins in `connect-src`.
 3. Portal CSP has the real LearningSuite ancestor(s) in `frame-ancestors`.
 4. The n8n OPTIONS preflight allows GET plus `Authorization` from the exact portal origin.
 5. 401/503/200 responses carry the exact `Access-Control-Allow-Origin`.
@@ -179,7 +182,7 @@ Use an explicitly approved test/new V2 customer path rather than creating produc
 - Reloading the cleaned standalone URL does not recreate credentials.
 - Revoking that grant makes the same link return 401.
 
-For two-customer isolation, use two already-populated authorized V2 client datasets when they exist. The prior 2026-09-17 read-only inspection found 0 Leads and 0 Target Companies, so do not claim a populated isolation test until suitable data exists.
+For two-customer isolation, use two already-populated authorized V2 client datasets when they exist. The latest 2026-09-17 read-only inspection found one test client and three leads whose target companies lack Client owners. Do not claim a populated isolation test until suitable owned data exists.
 
 ## Historical synthetic verification evidence
 

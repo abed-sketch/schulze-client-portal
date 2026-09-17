@@ -16,6 +16,7 @@ test("production headers, allowed cross-origin iframe and blocked unrelated pare
     "connect-src 'self' https://portal-api.test",
   );
   expect(h["referrer-policy"]).toBe("no-referrer");
+  expect(h["content-security-policy"]).toContain("wss://zwtmlrzwqnluosrdbjfv.supabase.co");
   expect(h["cache-control"]).toBe("no-store");
   expect(h["x-frame-options"]).toBeUndefined();
   expect(h["x-content-type-options"]).toBe("nosniff");

@@ -70,8 +70,7 @@ function parseResponse(v: unknown): BootstrapResponse {
     !record(v.customer) ||
     typeof v.customer.name !== "string" ||
     !v.customer.name.trim() ||
-    !Array.isArray(v.leads) ||
-    v.leads.length > 10000
+    !Array.isArray(v.leads)
   )
     throw new PortalError("service");
 
@@ -83,6 +82,8 @@ function parseResponse(v: unknown): BootstrapResponse {
         : (() => {
             throw new PortalError("service");
           })();
+  if (v.leads.length > (mode === "admin" ? 100000 : 10000))
+    throw new PortalError("service");
   const clients: PortalClient[] = [];
   const clientById = new Map<string, PortalClient>();
 
