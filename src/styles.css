@@ -788,3 +788,8 @@ footer p {
 .brand {
   flex-shrink: 0;
 }
+
+.language-switch { display: flex; gap: 2px; border: 1px solid #dfe5df; border-radius: 8px; padding: 3px; flex-shrink: 0; }
+.language-switch button { min-width: 38px; min-height: 36px; padding: 5px; border: 0; border-radius: 5px; background: transparent; color: #183e34; font: inherit; font-size: 12px; cursor: pointer; }
+.language-switch button[aria-pressed="true"] { background: #183e34; color: white; }
+@media (max-width: 560px) { .topbar { height: auto; min-height: 78px; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; } .company { max-width: 48%; } .language-switch { margin-left: auto; } }
