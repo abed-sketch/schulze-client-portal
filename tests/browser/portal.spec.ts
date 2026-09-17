@@ -1,0 +1,140 @@
+import { test, expect } from "@playwright/test";
+const token = "a".repeat(43);
+const lead = (id: string, name: string, status: string) => ({
+  id,
+  name,
+  contactName: "Anna Beispiel",
+  status,
+  website: "https://example.org",
+  notes: "Interesse an einem persönlichen Gespräch. Rückmeldung nächste Woche.",
+  email: "anna@example.org",
+  phone: "+49 30 123456",
+  position: "Geschäftsführung",
+  source: "LinkedIn",
+});
+const payload = {
+  customer: { name: "Beispiel Maschinenbau GmbH" },
+  leads: [
+    lead("1", "Nordlicht Präzision GmbH", "Neu"),
+    lead("2", "Bergmann Technik", "Kontaktiert"),
+    lead("3", "Hafenwerk Industrie", "Termin vereinbart"),
+    lead("4", "Westfeld Engineering", "Gewonnen"),
+  ],
+};
+test("desktop search, filter, sorting and safe token transport", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.route("https://portal-api.test/**", async (route) => {
+    expect(route.request().headers().authorization).toBe(`Bearer ${token}`);
+    expect(route.request().url()).not.toContain("token");
+    await route.fulfill({ json: payload });
+  });
+  await page.goto("/?token=" + token);
+  await expect(
+    page.getByRole("heading", { name: "Alle Interessenten" }),
+  ).toBeVisible();
+  expect(page.url()).not.toContain("token");
+  await expect(page.locator("tbody tr")).toHaveCount(4);
+  await page.getByRole("searchbox").fill("Nordlicht");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("searchbox").fill("");
+  await page.getByLabel("Status", { exact: true }).selectOption("Gewonnen");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByLabel("Status", { exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Interessent / Kontakt" }).click();
+  await expect(page.locator("tbody tr").first()).toContainText("Westfeld");
+  expect(
+    await page.evaluate(() => localStorage.length + sessionStorage.length),
+  ).toBe(0);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: "test-results/desktop.png", fullPage: true });
+});
+test("mobile cards fit and search works", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("https://portal-api.test/**", (r) =>
+    r.fulfill({ json: payload }),
+  );
+  await page.goto("/?token=" + token);
+  await expect(page.locator(".lead-card")).toHaveCount(4);
+  await expect(page.locator(".table-wrap")).not.toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: "test-results/mobile.png", fullPage: true });
+});
+test("invalid link makes no API request and 401 shows invalid state", async ({
+  page,
+}) => {
+  let requests = 0;
+  await page.route("https://portal-api.test/**", (r) => {
+    requests++;
+    return r.fulfill({ status: 401, json: { error: "unauthorized" } });
+  });
+  await page.goto("/?customer=KD015");
+  await expect(
+    page.getByRole("heading", { name: "Dieser Link ist nicht gültig" }),
+  ).toBeVisible();
+  expect(requests).toBe(0);
+  await page.goto("/?token=" + token);
+  await expect(
+    page.getByRole("heading", { name: "Dieser Link ist nicht gültig" }),
+  ).toBeVisible();
+});
+test("empty and service-error states are distinct", async ({ page }) => {
+  await page.route("https://portal-api.test/**", (r) =>
+    r.fulfill({ json: { customer: { name: "Test GmbH" }, leads: [] } }),
+  );
+  await page.goto("/?token=" + token);
+  await expect(page.getByText("Hier beginnt Ihre Übersicht")).toBeVisible();
+  await page.unroute("https://portal-api.test/**");
+  await page.route("https://portal-api.test/**", (r) =>
+    r.fulfill({ status: 503, body: "internal details" }),
+  );
+  await page.goto("/?token=" + token);
+  await expect(
+    page.getByRole("button", { name: "Erneut versuchen" }),
+  ).toBeVisible();
+  await expect(page.getByText("internal details")).toHaveCount(0);
+});
+test("renders inside an iframe without third-party cookies", async ({
+  page,
+}) => {
+  await page.route("https://portal-api.test/**", (r) =>
+    r.fulfill({ json: payload }),
+  );
+  await page.goto("/");
+  await page.setContent(
+    `<iframe title="Vertriebsportal" src="http://127.0.0.1:4173/?token=${token}" width="100%" height="900"></iframe>`,
+  );
+  await expect(
+    page
+      .frameLocator("iframe")
+      .getByRole("heading", { name: "Alle Interessenten" }),
+  ).toBeVisible();
+});
+test("long customer and lead names never overflow mobile viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("https://portal-api.test/**", (r) =>
+    r.fulfill({
+      json: {
+        ...payload,
+        customer: {
+          name: "Industrieautomatisierungsgesellschaft Beispiel GmbH",
+        },
+      },
+    }),
+  );
+  await page.goto("/?token=" + token);
+  await expect(page.locator(".lead-card")).toHaveCount(4);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
