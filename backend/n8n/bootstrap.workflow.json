@@ -1,0 +1,930 @@
+{
+  "name": "Schulze Portal · Read customer leads",
+  "nodes": [
+    {
+      "id": "194aa81d-653f-4f40-8090-2b8d7164e37a",
+      "name": "Portal bootstrap",
+      "parameters": {
+        "authentication": "none",
+        "httpMethod": "GET",
+        "options": {
+          "allowedOrigins": "https://portal-not-configured.invalid"
+        },
+        "path": "customer-portal/bootstrap",
+        "responseMode": "responseNode"
+      },
+      "position": [
+        0,
+        1232
+      ],
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "webhookId": "20eb598f-246a-46b3-85ed-5ebdc3c20f50"
+    },
+    {
+      "id": "9104de10-b82d-4a8d-9c00-8d1c77d59584",
+      "name": "Validate portal request",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsonOutput": "={{ (function validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n})($('Portal bootstrap').first().json,\"https://portal-not-configured.invalid\") }}",
+        "mode": "raw",
+        "options": {}
+      },
+      "position": [
+        224,
+        1232
+      ],
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5
+    },
+    {
+      "id": "1808c438-99f9-429f-afb6-c967975f02f4",
+      "name": "Request accepted",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Validate portal request').first().json.valid }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        448,
+        1152
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3
+    },
+    {
+      "id": "01c31f1d-97a6-4ddd-ab41-54bd222e2eb3",
+      "name": "Hash access token",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "action": "hash",
+        "binaryData": false,
+        "dataPropertyName": "tokenHash",
+        "encoding": "hex",
+        "type": "SHA256",
+        "value": "={{ $('Validate portal request').first().json.token }}"
+      },
+      "position": [
+        672,
+        1088
+      ],
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "9e13ad5e-5413-4282-9cbf-321375b0bc23",
+      "name": "Find access grant",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "guf9ynWoJBgyN0dF"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "eq",
+              "keyName": "tokenHash",
+              "keyValue": "={{ $('Hash access token').first().json.tokenHash }}"
+            }
+          ]
+        },
+        "limit": 2,
+        "matchType": "allConditions",
+        "operation": "get",
+        "resource": "row",
+        "returnAll": false
+      },
+      "position": [
+        896,
+        1008
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "fb1b6954-ada3-4256-9207-5115a0a705dd",
+      "name": "Authorize access grant",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn [{json:resolveGrant($input.all().map(i=>i.json),$('Hash access token').first().json.tokenHash)}];",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1120,
+        944
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "4b5f8e45-6bf6-47e7-a021-793c2f1d27a7",
+      "name": "Grant accepted",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Authorize access grant').first().json.valid }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        1344,
+        864
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "889395c1-2d0d-4e45-9eb3-59ebf2740f90",
+      "maxTries": 2,
+      "name": "Read authorized client",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "filterByFormula": "={{ \"RECORD_ID()='\" + $('Authorize access grant').first().json.clientRecordId + \"'\" }}",
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Client Name",
+            "Target Companies"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblfPwZLXgjYuFMsc"
+        }
+      },
+      "position": [
+        1568,
+        768
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "oun3u0zdIMOShiCK",
+          "name": "Schulze x Apex Airtable"
+        }
+      }
+    },
+    {
+      "id": "241b2cc7-53e1-4159-8845-836b5fb9b18f",
+      "name": "Check client record",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn [{json:clientScope($input.all().map(i=>i.json),$('Authorize access grant').first().json.clientRecordId)}];",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        1792,
+        704
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "b472c6cc-6931-4058-870d-ab8ab3200a1d",
+      "name": "Build target queries",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn batches($('Check client record').first().json.targetIds).map(json=>({json}));",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2016,
+        624
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "e41ce8a6-fe61-4b8a-a7cf-ad12fc2464f1",
+      "maxTries": 2,
+      "name": "Read scoped target companies",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "filterByFormula": "={{ $('Build target queries').item.json.formula }}",
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Client",
+            "Leads",
+            "Website"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tbln087XtgwIP7HPG"
+        }
+      },
+      "position": [
+        2240,
+        560
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "oun3u0zdIMOShiCK",
+          "name": "Schulze x Apex Airtable"
+        }
+      }
+    },
+    {
+      "id": "2090631d-c26c-4a93-808a-1fc73fc78788",
+      "name": "Check target ownership",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn [{json:targetScope($input.all().map(i=>i.json),$('Check client record').first().json)}];",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2464,
+        480
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "540457a2-4bf4-466b-8e73-a190c94d3b68",
+      "name": "Build lead queries",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn batches($('Check target ownership').first().json.leadIds).map(json=>({json}));",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        2688,
+        416
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "d1801e1c-7518-4f7e-acf4-5b3786f556c7",
+      "maxTries": 2,
+      "name": "Read scoped leads",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "filterByFormula": "={{ $('Build lead queries').item.json.formula }}",
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Lead Name",
+            "Target Company",
+            "Linked Person",
+            "Lead Status",
+            "Notes",
+            "Source"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblYeDa6ZbNL5YGTb"
+        }
+      },
+      "position": [
+        2912,
+        336
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "oun3u0zdIMOShiCK",
+          "name": "Schulze x Apex Airtable"
+        }
+      }
+    },
+    {
+      "id": "f3a2569d-bebe-4623-981c-2fb44b034c0f",
+      "name": "Check lead ownership",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn [{json:leadScope($input.all().map(i=>i.json),$('Check target ownership').first().json)}];",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3136,
+        272
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "47585e71-9fe0-444a-8ded-9eed66ce6c30",
+      "name": "Build contact queries",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn batches($('Check lead ownership').first().json.personIds).map(json=>({json}));",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3360,
+        192
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "a33e0d64-10cb-441a-aa19-062576dd012c",
+      "maxTries": 2,
+      "name": "Read scoped contacts",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "base": {
+          "__rl": true,
+          "mode": "id",
+          "value": "appAutw0Fvsuk2pfJ"
+        },
+        "filterByFormula": "={{ $('Build contact queries').item.json.formula }}",
+        "operation": "search",
+        "options": {
+          "fields": [
+            "Full Name",
+            "Email",
+            "Phone",
+            "Role/Title"
+          ]
+        },
+        "resource": "record",
+        "returnAll": true,
+        "table": {
+          "__rl": true,
+          "mode": "id",
+          "value": "tblf2AsiyZTb306JQ"
+        }
+      },
+      "position": [
+        3584,
+        128
+      ],
+      "retryOnFail": true,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "oun3u0zdIMOShiCK",
+          "name": "Schulze x Apex Airtable"
+        }
+      }
+    },
+    {
+      "id": "6b015d23-a436-46e5-affe-5bcff9bfebf5",
+      "name": "Normalize portal response",
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "jsCode": "                                   \n                                                                                                                                                             \nconst recordPattern = /^rec[A-Za-z0-9]{14}$/;\nfunction fail()        { throw new Error('portal_data_unavailable'); }\nfunction fields(row     )      { return row.fields && typeof row.fields === 'object' && !Array.isArray(row.fields) ? row.fields        : row; }\nfunction ids(value         , max        )           {\n  if (value === undefined || value === null) return [];\n  if (!Array.isArray(value) || value.length > max || value.some(id => typeof id !== 'string' || !recordPattern.test(id)) || new Set(value).size !== value.length) fail();\n  return value            ;\n}\nfunction rowsExact(rows       , expected          )        {\n  const actual=rows.filter(row=>Object.keys(row).length !== 0);\n  if(actual.length!==expected.length || new Set(actual.map(r=>r.id)).size!==actual.length || actual.some(r=>typeof r.id!=='string'||!expected.includes(r.id))) fail();\n  return actual;\n}\nfunction optional(value         )                {\n  if(value===undefined||value===null||value==='') return null;\n  if(typeof value!=='string'||value.length>100000) fail();\n  return value;\n}\nfunction validateRequest(req     , origin        ) {\n  const h=(req.headers||{})       ;\n  const auth=h.authorization;\n  const valid=typeof auth==='string' && /^Bearer [A-Za-z0-9_-]{43}$/.test(auth) &&\n    Object.keys((req.query||{})          ).length===0 && Object.keys((req.body||{})          ).length===0 &&\n    (h.origin===undefined || h.origin===origin);\n  return {valid, token:valid ? (auth          ).slice(7) : ''};\n}\nfunction resolveGrant(rows       , hash        , now=Date.now()) {\n  const actual=rows.filter(r=>Object.keys(r).length>0);\n  const g=actual[0];\n  const valid=actual.length===1 && /^[a-f0-9]{64}$/.test(hash) && g.tokenHash===hash &&\n    typeof g.clientRecordId==='string' && recordPattern.test(g.clientRecordId) && g.scope==='portal:read' &&\n    (g.revokedAt===null||g.revokedAt==='') && typeof g.expiresAt==='string' && Number.isFinite(Date.parse(g.expiresAt)) && Date.parse(g.expiresAt)>now;\n  return {valid,clientRecordId:valid ? g.clientRecordId           : ''};\n}\nfunction batches(values          ) {\n  ids(values,10000);\n  if(values.length===0) return [{formula:'FALSE()'}];\n  const result=[];\n  for(let i=0;i<values.length;i+=50) result.push({formula:'OR('+values.slice(i,i+50).map(id=>\"RECORD_ID()='\"+id+\"'\").join(',')+')'});\n  return result;\n}\nfunction clientScope(rows       , clientRecordId        )        {\n  if(!recordPattern.test(clientRecordId)) fail();\n  const row=rowsExact(rows,[clientRecordId])[0];\n  const f=fields(row); const name=optional(f['Client Name']);\n  if(!name) fail();\n  return {clientRecordId,customerName:name,targetIds:ids(f['Target Companies'],500)};\n}\nfunction targetScope(rows       , scope       )        {\n  const targets=rowsExact(rows,scope.targetIds);\n  const leadIds         =[];\n  for(const row of targets){\n    const f=fields(row);const owners=ids(f.Client,1);\n    if(owners.length!==1||owners[0]!==scope.clientRecordId) fail();\n    leadIds.push(...ids(f.Leads,10000));\n  }\n  ids(leadIds,10000);\n  return {...scope,targets,leadIds};\n}\nfunction leadScope(rows       , scope       )        {\n  const leads=rowsExact(rows,scope.leadIds||[]);const people=new Set        ();\n  for(const row of leads){\n    const f=fields(row);const target=ids(f['Target Company'],1);\n    if(target.length!==1||!scope.targetIds.includes(target[0])) fail();\n    const parent=scope.targets?.find(t=>t.id===target[0]);\n    if(!parent||!ids(fields(parent).Leads,10000).includes(row.id          )) fail();\n    for(const p of ids(f['Linked Person'],1)) people.add(p);\n  }\n  return {...scope,leads,personIds:[...people]};\n}\nfunction normalize(rows       , scope       ) {\n  const people=rowsExact(rows,scope.personIds||[]);\n  const leads=(scope.leads||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).map((row,index)=>{\n    const f=fields(row);const t=fields(scope.targets .find(t=>t.id===(f['Target Company']            )[0]) );\n    const personId=ids(f['Linked Person'],1)[0];\n    const p=personId?fields(people.find(p=>p.id===personId) ):{};\n    return {id:'lead-'+(index+1),name:optional(f['Lead Name'])||optional(p['Full Name'])||'Unbenannter Interessent',contactName:optional(p['Full Name']),status:optional(f['Lead Status']),website:optional(t.Website),notes:optional(f.Notes),email:optional(p.Email),phone:optional(p.Phone),position:optional(p['Role/Title']),source:optional(f.Source)};\n  });\n  return {customer:{name:scope.customerName},leads};\n}\n\nreturn [{json:normalize($input.all().map(i=>i.json),$('Check lead ownership').first().json)}];",
+        "mode": "runOnceForAllItems"
+      },
+      "position": [
+        3808,
+        48
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "executeOnce": true,
+      "id": "7b937f78-4ab3-4865-92ae-83a05645894e",
+      "name": "Return customer portal",
+      "parameters": {
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://portal-not-configured.invalid"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": "={{ $('Normalize portal response').first().json }}"
+      },
+      "position": [
+        4032,
+        0
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "executeOnce": true,
+      "id": "57bc8905-3a7d-42f0-9e8e-b888cdf30d9b",
+      "name": "Reject access",
+      "parameters": {
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://portal-not-configured.invalid"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": {
+          "error": "unauthorized",
+          "message": "Dieser Link ist ungültig oder abgelaufen."
+        }
+      },
+      "position": [
+        1568,
+        1376
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "executeOnce": true,
+      "id": "6c6e5fe2-c92d-45a8-9eaf-c5670d7ef5d3",
+      "name": "Return service error",
+      "parameters": {
+        "options": {
+          "responseCode": 503,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "https://portal-not-configured.invalid"
+              },
+              {
+                "name": "Vary",
+                "value": "Origin"
+              }
+            ]
+          }
+        },
+        "respondWith": "json",
+        "responseBody": {
+          "error": "service_unavailable",
+          "message": "Die Daten konnten nicht geladen werden."
+        }
+      },
+      "position": [
+        4032,
+        944
+      ],
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5
+    },
+    {
+      "id": "216940d4-740e-460b-bcc2-70b3336848ea",
+      "name": "Sticky Note 2d232c77",
+      "parameters": {
+        "color": 2,
+        "content": "### Read-only customer portal\nBearer token → hashed grant → canonical V2 client → owned targets → owned leads. Airtable nodes only search.\nConfigure the exact portal origin before publishing. No public Airtable share URL is used."
+      },
+      "position": [
+        2016,
+        1440
+      ],
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Authorize access grant": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Grant accepted",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build contact queries": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read scoped contacts",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build lead queries": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read scoped leads",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Build target queries": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read scoped target companies",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check client record": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build target queries",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check lead ownership": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build contact queries",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Check target ownership": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Build lead queries",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Find access grant": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Authorize access grant",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Grant accepted": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Read authorized client",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Reject access",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Hash access token": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Find access grant",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Normalize portal response": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Return customer portal",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Portal bootstrap": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Validate portal request",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read authorized client": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check client record",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read scoped contacts": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Normalize portal response",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read scoped leads": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check lead ownership",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Read scoped target companies": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Check target ownership",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Request accepted": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Hash access token",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Reject access",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Validate portal request": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Request accepted",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Return service error",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionOrder": "v1",
+    "executionTimeout": 60,
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false
+  },
+  "active": false
+}

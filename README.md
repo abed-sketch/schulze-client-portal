@@ -4,7 +4,7 @@ One customer-facing React application for the LearningSuite Vertriebsportal. Ger
 
 ## Current delivery status
 
-Frontend implemented; backend integration is **not live**. No tokens have been issued, no customers created, and no existing provisioning workflow changed. The application fails closed when configuration or a valid customer link is missing. It contains no production demo mode.
+Frontend implemented; n8n bootstrap API and private token issuer are installed as inactive drafts. Backend integration is **not live**. An empty n8n hashed-token registry was created. No tokens have been issued, no customers created, and no existing provisioning workflow changed. See `backend/n8n/README.md` for installed workflow IDs, test evidence and activation steps. The application fails closed when configuration or a valid customer link is missing. It contains no production demo mode.
 
 Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. Read-only record inspection returned **0 Leads and 0 Target Companies**. No real two-customer integration test is possible against these empty tables. See `backend/README.md` for the exact remaining integration work.
 
@@ -36,7 +36,7 @@ Browser tests intercept HTTPS API calls using fabricated fixtures. They prove fr
 
 `GET ${VITE_API_BASE_URL}/customer-portal/bootstrap`
 
-Authorization: `Bearer <43-character base64url opaque token>` (32 random bytes). Token shape validation in React is only input hygiene; all authorization must run in n8n. No customer ID/query selectors are accepted by the app. `credentials: omit`, no-store, redirect refusal, 25-second timeout, cancellation and sanitized errors are implemented.
+Authorization: `Bearer <43-character base64url opaque token>` (at least 256 bits of entropy). The native issuer generates 43 cryptographically random base64 characters and converts them to URL-safe form. Token shape validation in React is only input hygiene; all authorization must run in n8n. No customer ID/query selectors are accepted by the app. `credentials: omit`, no-store, redirect refusal, 25-second timeout, cancellation and sanitized errors are implemented.
 
 ```ts
 type BootstrapResponse = {

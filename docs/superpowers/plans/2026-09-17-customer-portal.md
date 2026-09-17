@@ -36,7 +36,8 @@ Files: backend/README.md, tests/ownership.test.ts, backend/ownership.ts.
 
 - [x] Verify current n8n schema/link destinations using read-only tools. Record evidence and unresolved constraints.
 - [x] Write and run failing two-customer ownership tests; implement fail-closed reference boundary.
-- [ ] BLOCKED: configure isolated n8n endpoint after access-registry setup and real ownership validation. Every API path must respond; payload execution logging disabled.
+- [x] Install isolated n8n API and private token issuer; create empty hashed-grant registry; test authorization with synthetic fixtures. Payload execution logging disabled in final drafts.
+- [ ] Activate after portal-origin configuration, proxy protections and real Airtable/iframe verification; wire issuer and URL into V2-09 after caller privacy settings are fixed.
 - [x] Do not claim reference tests prove live workflow isolation. Keep integration explicitly unavailable when blocked.
 
 ## Task 4: review and deliver
@@ -51,4 +52,4 @@ Files: backend/README.md, tests/ownership.test.ts, backend/ownership.ts.
 - 15 unit/reference tests, 6 browser tests, and 1 production-header/cross-origin iframe test passed.
 - Code review found long-name mobile overflow; regression reproduced then fixed.
 - Production CSP test permits a synthetic allowed HTTPS parent and rejects an unrelated HTTPS parent, using the actual production server and build. Actual LS domain still unverified.
-- Backend and LS provisioning remain blocked as documented; no production API endpoint claimed.
+- Backend drafts are installed and synthetic n8n tests pass; activation and LS provisioning remain pending as documented in backend/n8n/README.md.

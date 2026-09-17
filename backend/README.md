@@ -1,4 +1,6 @@
-# Backend integration handoff — not deployed
+# Backend integration handoff — inactive drafts installed
+
+Update: the bootstrap API, private token issuer and empty n8n access registry are now installed. See [n8n implementation and verification](n8n/README.md). The earlier design checklist below records the original integration requirements; implemented items are detailed in that handoff. Production activation and LearningSuite wiring remain pending.
 
 ## Verified facts (2026-09-17)
 
@@ -31,7 +33,7 @@ Created an inactive, manual-only **Schulze Portal · Read-only schema verificati
 
 ## Remaining work before live integration
 
-1. Establish the customer access registry storage. No registry exists in the inspected V2 schema. Proposed fields: token SHA-256 digest (unique), linked canonical Client (exactly one), expiresAt, revokedAt, scope=`portal:read`, grant ID. Store only the digest. Generate 32 random bytes server-side; never issue tokens through an unauthenticated public endpoint.
+1. Establish the customer access registry storage. No registry exists in the V2 Airtable schema; the implementation now uses the separate n8n `schulzePortalGrants` Data Table. Proposed fields: token SHA-256 digest (unique), linked canonical Client (exactly one), expiresAt, revokedAt, scope=`portal:read`, grant ID. Store only the digest. Generate 32 random bytes server-side; never issue tokens through an unauthenticated public endpoint.
 2. Build isolated n8n bootstrap API. Reject missing/duplicate/malformed bearer credentials and all customer selectors; resolve exactly one nonexpired nonrevoked grant and exactly one existing client. Ambiguous or unavailable registry returns no customer data.
 3. Fetch only IDs reached from the authorized client's Target Companies and their Leads. Use exact `RECORD_ID()` selection or record gets; do not compare linked-record display names with Airtable IDs. Recheck every target's sole Client and every lead's sole Target Company. Fetch People only from these authorized leads. Empty ID sets must return an empty result, never an unfiltered query.
 4. Normalize allowlisted fields; blank optional values become null. Missing/multiple linked people require an explicit reviewed rule; no arbitrary first match. `ownership.ts` demonstrates the lead boundary but does not authenticate tokens or read Airtable.
