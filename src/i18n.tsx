@@ -81,7 +81,26 @@ const english: Record<string, string> = {
   "Kontaktiert": "Contacted",
   "Termin vereinbart": "Meeting scheduled",
   "Gewonnen": "Won",
-  "Verloren": "Lost"
+  "Verloren": "Lost",
+  "Interaktionen & Dealphase": "Interactions & deal stage",
+  "Bestehende Leads pflegen": "Update existing leads",
+  "Sie können eine Interaktion ergänzen oder die Dealphase ändern. Neue Leads können hier nicht angelegt werden.": "You can add an interaction or change the deal stage. New leads cannot be created here.",
+  "Bestehenden Lead aktualisieren": "Update existing lead",
+  "Schließen": "Close",
+  "Neue Interaktion": "New interaction",
+  "Kurze Notiz zur neuen Interaktion …": "Short note about the new interaction …",
+  "Dealphasen werden geladen …": "Loading deal stages …",
+  "Bitte fügen Sie eine Interaktion hinzu oder ändern Sie die Dealphase.": "Please add an interaction or change the deal stage.",
+  "Gespeichert. Die Änderung erscheint nach der nächsten Synchronisierung in der Übersicht.": "Saved. The change will appear in the overview after the next synchronization.",
+  "Dieser Lead kann mit Ihrem Zugang nicht geändert werden.": "This lead cannot be changed with your access.",
+  "Die Bearbeitungsoptionen konnten nicht geladen werden.": "The editing options could not be loaded.",
+  "Die Änderung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.": "The change could not be saved. Please try again.",
+  "Abbrechen": "Cancel",
+  "Wird gespeichert …": "Saving …",
+  "Änderung speichern": "Save change",
+  "Aktion": "Action",
+  "Aktualisieren": "Update",
+  "Lead aktualisieren": "Update lead"
 };
 const LanguageContext = createContext({ language: "de" as Language, setLanguage: (_: Language) => {} });
 export function LanguageProvider({ children }: { children: ReactNode }) {
