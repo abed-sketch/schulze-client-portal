@@ -1,10 +1,10 @@
 # Schulze Client Portal
 
-One customer-facing React application for the LearningSuite Vertriebsportal. German/English lead overview with a DE/EN switch, responsive table/cards, search, status filter, sorting, safe external links and explicit loading/empty/error states.
+One customer-facing React application for the LearningSuite Vertriebsportal. German/English lead overview with a DE/EN switch, responsive table/cards, search, status filter and sorting. Verified LearningSuite customer sessions can update existing leads by adding an interaction or changing the deal stage; there is no customer lead-creation path.
 
 ## Current delivery status
 
-Frontend implemented and deployed at `https://schulze-client-portal-production.up.railway.app/`. The read-only n8n bootstrap API (`qpxbpg33KsqgeiP7`) and private token issuer (`phBJ8osenbUnNCPb`) are published. FUL-V2-09 (`yhHEoqYAJGEJ1g0J`) now issues a customer-scoped portal grant only when creating a new Vertriebsportal Hub and injects the one-time bearer URL into `AirtableembedAppLinkNachEmbedd`. Only the SHA-256 token hash and non-secret grant metadata are persisted; V2-09, its issuer, and the V2-01 caller have execution payload persistence disabled.
+Frontend implemented and deployed at `https://schulze-client-portal-production.up.railway.app/`. The read API (`qpxbpg33KsqgeiP7`), scoped existing-lead update API (`MQZlQMHsB01tGN9w`), and private token issuer (`phBJ8osenbUnNCPb`) are published. FUL-V2-09 (`yhHEoqYAJGEJ1g0J`) now issues a customer-scoped portal grant only when creating a new Vertriebsportal Hub and injects the one-time bearer URL into `AirtableembedAppLinkNachEmbedd`. Only the SHA-256 token hash and non-secret grant metadata are persisted; V2-09, its issuer, and the V2-01 caller have execution payload persistence disabled.
 
 The provisioning policy currently uses a 365-day portal-grant expiry. If Hub creation becomes uncertain after issuance, automatic re-issuance is blocked for manual reconciliation instead of silently creating another customer link. Existing LearningSuite Hubs are reused, but the documented LearningSuite API does not expose a creation-variable update endpoint; an existing Hub without the secure portal URL is therefore marked `Needs Migration` rather than mutated through an invented API contract.
 
@@ -43,6 +43,14 @@ npm run test:production
 Browser tests intercept HTTPS API calls using fabricated fixtures. They prove frontend behavior, not a working Airtable/n8n integration. An optional `PLAYWRIGHT_CHROMIUM_EXECUTABLE` environment variable supports a locally installed Chromium.
 
 ## API contract
+
+### Existing-lead updates
+
+Editing is exposed only for verified LearningSuite customer sessions. Legacy bearer-link sessions and Schulze admin sessions remain read-only.
+
+`GET ${VITE_API_BASE_URL}/customer-portal/lead-options` returns the canonical Airtable single-select choices for the deal-stage field after verifying the LearningSuite bearer and customer scope.
+
+`POST ${VITE_API_BASE_URL}/customer-portal/lead-update` accepts only an existing Airtable lead record ID plus an optional new interaction and/or deal-stage change. The backend re-verifies LearningSuite identity, resolves customer ownership server-side, validates the deal-stage choice against live Airtable schema, and uses the request ID to make interaction creation idempotent. It has no route for creating a new lead.
 
 `GET ${VITE_API_BASE_URL}/customer-portal/bootstrap`
 
@@ -127,6 +135,7 @@ The raw token exists only in the in-memory provisioning path long enough to crea
 
 - No Airtable PAT, n8n integration credential, or Supabase privileged key in the browser. The public Supabase key can read only non-sensitive invalidation events. Lead data always passes through the bearer-authorized API.
 - Customer token is held in memory only. Query and fragment are removed on startup. Reloading the cleaned URL requires reopening the original LS link.
+- Existing-lead write controls are enabled only when the portal was opened through a verified LearningSuite session. Legacy token links remain read-only.
 - The initial token-bearing URL reaches the host/proxy before JavaScript executes. Infrastructure log redaction is mandatory; frontend URL cleanup does not solve server logs.
 - Bearer links can be shared. They are not LearningSuite SSO. Expiration and immediate revocation are backend requirements.
 - CSP permits configured API/realtime origins and LS ancestors. No analytics, third-party fonts, scripts or images.
