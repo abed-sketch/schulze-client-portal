@@ -1,8 +1,14 @@
 import { useLanguage } from "../i18n";
 import { useMemo, useState } from "react";
-import type { Lead, PortalClient, PortalMode } from "../api/portal";
+import type {
+  Lead,
+  LeadUpdateInput,
+  PortalClient,
+  PortalMode,
+} from "../api/portal";
 
 const value = (s: string | null) => s?.trim() || "—";
+const recordId = /^rec[A-Za-z0-9]{14}$/;
 type SortKey = "name" | "status" | "source" | "clientName";
 
 function Website({ url }: { url: string | null }) {
@@ -76,11 +82,15 @@ export function Leads({
   mode,
   showClientFilter = false,
   clients,
+  canEdit = false,
+  onUpdate,
 }: {
   leads: Lead[];
   mode: PortalMode;
   showClientFilter?: boolean;
   clients: PortalClient[];
+  canEdit?: boolean;
+  onUpdate?: (input: LeadUpdateInput) => Promise<void>;
 }) {
   const { t, language } = useLanguage();
   const isAdmin = mode === "admin";
@@ -90,6 +100,12 @@ export function Leads({
   const [client, setClient] = useState("");
   const [sort, setSort] = useState<SortKey>(showClients ? "clientName" : "name");
   const [desc, setDesc] = useState(false);
+  const [editing, setEditing] = useState<Lead | null>(null);
+  const [interactionText, setInteractionText] = useState("");
+  const [dealPhase, setDealPhase] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const statuses = useMemo(
     () =>
@@ -97,6 +113,11 @@ export function Leads({
         a.localeCompare(b, language),
       ),
     [leads, language],
+  );
+
+  const editableStatuses = useMemo(
+    () => statuses.filter((s) => s !== "__no_status__"),
+    [statuses],
   );
 
   const filtered = useMemo(() => {
@@ -126,11 +147,56 @@ export function Leads({
             numeric: true,
           }) * (desc ? -1 : 1),
       );
-  }, [leads, search, status, client, sort, desc, language]);
+  }, [leads, search, status, client, sort, desc, language, t]);
 
   function changeSort(key: SortKey) {
     setDesc(sort === key ? !desc : false);
     setSort(key);
+  }
+
+  function openEditor(lead: Lead) {
+    setEditing(lead);
+    setInteractionText("");
+    setDealPhase(lead.status || "");
+    setSaveError("");
+    setNotice("");
+  }
+
+  function closeEditor() {
+    if (saving) return;
+    setEditing(null);
+    setInteractionText("");
+    setDealPhase("");
+    setSaveError("");
+  }
+
+  async function saveEdit() {
+    if (!editing || !onUpdate || saving) return;
+    const interaction = interactionText.trim();
+    const phaseChanged = dealPhase !== (editing.status || "");
+    if (!interaction && !phaseChanged) {
+      setSaveError(t("Bitte fügen Sie eine Interaktion hinzu oder ändern Sie die Dealphase."));
+      return;
+    }
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onUpdate({
+        requestId: crypto.randomUUID(),
+        leadId: editing.id,
+        interactionText: interaction || undefined,
+        dealPhase: dealPhase || undefined,
+        interactionDate: new Date().toISOString(),
+      });
+      setNotice(t("Änderung gespeichert. Die Übersicht aktualisiert sich automatisch."));
+      setEditing(null);
+      setInteractionText("");
+      setDealPhase("");
+    } catch {
+      setSaveError(t("Änderung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   const heading = (key: SortKey, label: string) => (
@@ -143,6 +209,9 @@ export function Leads({
       </button>
     </th>
   );
+
+  const editable = (lead: Lead) =>
+    canEdit && !isAdmin && Boolean(onUpdate) && recordId.test(lead.id);
 
   return (
     <section
@@ -163,7 +232,11 @@ export function Leads({
         </div>
         <span className="read-only">
           <span aria-hidden="true">◉</span>{" "}
-          {isAdmin ? t("Team-Leseansicht") : t("Leseansicht")}
+          {isAdmin
+            ? t("Team-Leseansicht")
+            : canEdit
+              ? t("Kundenansicht")
+              : t("Leseansicht")}
         </span>
       </div>
 
@@ -173,6 +246,12 @@ export function Leads({
           <span>
             {t("Dieser geschützte Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.")}
           </span>
+        </div>
+      )}
+
+      {notice && (
+        <div className="save-notice" role="status">
+          {notice}
         </div>
       )}
 
@@ -217,7 +296,9 @@ export function Leads({
           >
             <option value="">{t("Alle Status")}</option>
             {statuses.map((s) => (
-              <option value={s} key={s}>{t(s === "__no_status__" ? "Ohne Status" : s)}</option>
+              <option value={s} key={s}>
+                {t(s === "__no_status__" ? "Ohne Status" : s)}
+              </option>
             ))}
           </select>
         </label>
@@ -287,6 +368,7 @@ export function Leads({
                   <th>{t("Position")}</th>
                   {heading("source", t("Quelle"))}
                   <th>{t("Notizen")}</th>
+                  {canEdit && !isAdmin && <th>{t("Aktion")}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -324,11 +406,23 @@ export function Leads({
                     <td>
                       <Notes notes={l.notes} />
                     </td>
+                    {canEdit && !isAdmin && (
+                      <td>
+                        {editable(l) ? (
+                          <button className="edit-lead" onClick={() => openEditor(l)}>
+                            {t("Aktualisieren")}
+                          </button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
           <div className="cards">
             {filtered.map((l) => (
               <article className="lead-card" key={l.id}>
@@ -375,11 +469,92 @@ export function Leads({
                     </dd>
                   </div>
                 </dl>
+                {editable(l) && (
+                  <button className="edit-lead card-edit" onClick={() => openEditor(l)}>
+                    {t("Interaktion hinzufügen / Dealphase ändern")}
+                  </button>
+                )}
               </article>
             ))}
           </div>
         </>
       )}
+
+      {editing && (
+        <div className="lead-editor-backdrop" role="presentation" onMouseDown={closeEditor}>
+          <div
+            className="lead-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lead-editor-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="lead-editor-heading">
+              <div>
+                <div className="eyebrow">{t("BESTEHENDEN LEAD AKTUALISIEREN")}</div>
+                <h3 id="lead-editor-title">{editing.name}</h3>
+                <p>{t("Fügen Sie eine Interaktion hinzu oder ändern Sie die Dealphase.")}</p>
+              </div>
+              <button
+                className="close-editor"
+                type="button"
+                aria-label={t("Schließen")}
+                onClick={closeEditor}
+                disabled={saving}
+              >
+                ×
+              </button>
+            </div>
+
+            <label className="editor-field">
+              <span>{t("Dealphase")}</span>
+              <select
+                value={dealPhase}
+                onChange={(event) => setDealPhase(event.target.value)}
+                disabled={saving}
+              >
+                {!editing.status && <option value="">{t("Keine Änderung")}</option>}
+                {editableStatuses.map((s) => (
+                  <option value={s} key={s}>
+                    {t(s)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="editor-field">
+              <span>{t("Neue Interaktion")}</span>
+              <textarea
+                rows={5}
+                maxLength={5000}
+                value={interactionText}
+                onChange={(event) => setInteractionText(event.target.value)}
+                placeholder={t("Was wurde mit diesem Interessenten besprochen oder vereinbart?")}
+                disabled={saving}
+              />
+              <small>
+                {interactionText.length}/5000
+              </small>
+            </label>
+
+            {saveError && (
+              <div className="editor-error" role="alert">
+                {saveError}
+              </div>
+            )}
+
+            <div className="editor-actions">
+              <button className="secondary" type="button" onClick={closeEditor} disabled={saving}>
+                {t("Abbrechen")}
+              </button>
+              <button className="primary" type="button" onClick={() => void saveEdit()} disabled={saving}>
+                {saving ? t("Speichern …") : t("Speichern")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="panel-footer" role="status">
         {filtered.length} {t("von")} {leads.length} {t("Interessenten")}
         <span>
