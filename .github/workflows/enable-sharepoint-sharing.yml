@@ -67,6 +67,16 @@ jobs:
             $certificatePassword = ConvertTo-SecureString $env:SHAREPOINT_CERTIFICATE_PASSWORD -AsPlainText -Force
 
             Connect-PnPOnline -Url $env:SHAREPOINT_ADMIN_URL -ClientId $env:SHAREPOINT_CLIENT_ID -Tenant $env:SHAREPOINT_TENANT -CertificatePath $certPath -CertificatePassword $certificatePassword
+
+            try {
+              # Read first so an Entra/SharePoint authorization problem is reported
+              # before we attempt to mutate the site.
+              $null = Get-PnPTenantSite -Identity $env:SITE_URL -ErrorAction Stop
+            }
+            catch {
+              throw "SharePoint tenant-site access was rejected. Verify the Entra app has SharePoint (not Microsoft Graph) Application permission Sites.FullControl.All, tenant admin consent is granted, and the uploaded certificate matches SHAREPOINT_CERTIFICATE_BASE64. Original error: $($_.Exception.Message)"
+            }
+
             Set-PnPTenantSite -Identity $env:SITE_URL -SharingCapability ExternalUserSharingOnly
 
             $verified = $false
