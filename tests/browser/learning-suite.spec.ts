@@ -88,3 +88,46 @@ test('portal bridge waits for LearningSuite authManager initialization',async({p
  await page.goto(parent+'/portal-test');
  await expect(page.frameLocator('iframe').getByRole('cell',{name:'Alpha —',exact:true})).toBeVisible();
 });
+
+
+test('customer can add an interaction and change the deal stage for an existing lead only', async ({page}) => {
+  let updateBody:any = null;
+  await page.route(endpoint, route => route.fulfill({json:response('a','Alpha')}));
+  await page.route('https://portal-api.test/webhook/customer-portal/lead-update', async route => {
+    updateBody = route.request().postDataJSON();
+    expect(route.request().headers().authorization).toBe('Bearer token-A');
+    await route.fulfill({json:{
+      ok:true,
+      leadId:'recBBBBBBBBBBBBBB',
+      interaction:{requested:true,created:true,reused:false},
+      dealPhase:{requested:'New',updated:false,previous:'New'},
+    }});
+  });
+  const app=await embed(page);
+  await expect(app.getByRole('button',{name:'Aktualisieren'})).toBeVisible();
+  await app.getByRole('button',{name:'Aktualisieren'}).click();
+  await expect(app.getByRole('dialog')).toBeVisible();
+  await app.getByLabel('Neue Interaktion').fill('Kunde bestätigt den nächsten Schritt.');
+  await app.getByRole('button',{name:'Speichern',exact:true}).click();
+  await expect(app.getByText('Änderung gespeichert. Die Übersicht aktualisiert sich automatisch.')).toBeVisible();
+  expect(updateBody).toMatchObject({
+    leadId:'recBBBBBBBBBBBBBB',
+    interactionText:'Kunde bestätigt den nächsten Schritt.',
+    dealPhase:'New',
+  });
+  expect(typeof updateBody.requestId).toBe('string');
+  expect(updateBody.requestId.length).toBeGreaterThanOrEqual(8);
+});
+
+test('legacy opaque-link portal remains read-only', async ({page}) => {
+  const legacy={
+    mode:'customer',
+    customer:{name:'Alpha'},
+    clients:[],
+    leads:[{id:'lead-1',name:'Legacy Lead',contactName:null,status:'New',website:null,notes:null,email:null,phone:null,position:null,source:null,clientRecordId:null,clientName:null}],
+  };
+  await page.route('https://portal-api.test/**', route => route.fulfill({json:legacy}));
+  await page.goto('http://127.0.0.1:4173/?token=' + 'a'.repeat(43));
+  await expect(page.getByRole('heading',{name:'Alle Interessenten'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Aktualisieren'})).toHaveCount(0);
+});
