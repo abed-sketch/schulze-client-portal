@@ -120,7 +120,7 @@ export function App({ token }: { token: string | null }) {
   const isAdmin = ready?.mode === "admin";
 
   const saveLeadUpdate = async (input: LeadUpdateInput) => {
-    if (token || !ready || ready.mode !== "customer")
+    if (token || presentation?.mode !== "customer")
       throw new PortalError("not-provisioned");
     const sessionToken = await requestLearningSuiteToken();
     await updateExistingLead(
