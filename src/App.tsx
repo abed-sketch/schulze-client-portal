@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import {
   bootstrap,
   bootstrapLearningSuite,
+  updateExistingLead,
   PortalError,
   type BootstrapResponse,
   type ErrorCode,
+  type LeadUpdateInput,
 } from "./api/portal";
 import { Leads } from "./components/Leads";
 import { subscribePortalInvalidations } from "./api/realtime";
@@ -117,6 +119,17 @@ export function App({ token }: { token: string | null }) {
   const ready = state.kind === "ready" ? state.data : null;
   const isAdmin = ready?.mode === "admin";
 
+  const saveLeadUpdate = async (input: LeadUpdateInput) => {
+    if (token || !ready || ready.mode !== "customer")
+      throw new PortalError("not-provisioned");
+    const sessionToken = await requestLearningSuiteToken();
+    await updateExistingLead(
+      import.meta.env.VITE_API_BASE_URL || "",
+      sessionToken,
+      input,
+    );
+  };
+
   return (
     <>
       <a className="skip-link" href="#main">
@@ -179,7 +192,15 @@ export function App({ token }: { token: string | null }) {
         </div>
         {presentation && state.kind !== 'error' && (
           <div aria-busy={!ready}>
-            <Leads key={presentation.key} mode={presentation.mode} showClientFilter={presentation.multi} clients={ready?.clients || []} leads={ready?.leads || []} />
+            <Leads
+              key={presentation.key}
+              mode={presentation.mode}
+              showClientFilter={presentation.multi}
+              clients={ready?.clients || []}
+              leads={ready?.leads || []}
+              canEdit={!token && presentation.mode === "customer"}
+              onUpdate={saveLeadUpdate}
+            />
           </div>
         )}
         {state.kind === "ready" ? null : state.kind === "loading" ? (
