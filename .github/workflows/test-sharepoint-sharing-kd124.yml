@@ -83,6 +83,18 @@ jobs:
 
             Connect-PnPOnline -Url $env:SHAREPOINT_ADMIN_URL -ClientId $env:SHAREPOINT_CLIENT_ID -Tenant $env:SHAREPOINT_TENANT -CertificatePath $certPath -CertificatePassword $certificatePassword
 
+            Write-Host 'SharePoint token permissions:'
+            Get-PnPAccessToken -ListPermissionScopes -ResourceTypeName SharePoint | ForEach-Object { Write-Host (" - " + [string]$_) }
+
+            $getTenantSiteAllowed = Test-PnPConnectionPermission -CommandName Get-PnPTenantSite
+            $setTenantSiteAllowed = Test-PnPConnectionPermission -CommandName Set-PnPTenantSite
+            Write-Host ("Get-PnPTenantSite permission check: " + [string]$getTenantSiteAllowed)
+            Write-Host ("Set-PnPTenantSite permission check: " + [string]$setTenantSiteAllowed)
+
+            if (-not $getTenantSiteAllowed -or -not $setTenantSiteAllowed) {
+              throw "The Entra app is authenticated, but its SharePoint application permissions are insufficient. Grant SharePoint Sites.FullControl.All (Application) to the app and grant tenant admin consent."
+            }
+
             $before = Get-PnPTenantSite -Identity $env:SITE_URL
             Write-Host ("Before: " + [string]$before.SharingCapability)
 
