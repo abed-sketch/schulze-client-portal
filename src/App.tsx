@@ -179,7 +179,7 @@ export function App({ token }: { token: string | null }) {
         </div>
         {presentation && state.kind !== 'error' && (
           <div aria-busy={!ready}>
-            <Leads key={presentation.key} mode={presentation.mode} showClientFilter={presentation.multi} clients={ready?.clients || []} leads={ready?.leads || []} />
+            <Leads key={presentation.key} mode={presentation.mode} showClientFilter={presentation.multi} clients={ready?.clients || []} leads={ready?.leads || []} editable={!token && ready?.mode === "customer"} />
           </div>
         )}
         {state.kind === "ready" ? null : state.kind === "loading" ? (
