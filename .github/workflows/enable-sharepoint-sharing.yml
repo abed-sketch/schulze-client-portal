@@ -1,0 +1,114 @@
+name: Enable SharePoint external sharing
+
+on:
+  repository_dispatch:
+    types: [enable-sharepoint-sharing]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sharepoint-sharing-${{ github.event.client_payload.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  enable-sharing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sharepoint-production
+    env:
+      SITE_URL: ${{ github.event.client_payload.site_url }}
+      REQUEST_ID: ${{ github.event.client_payload.request_id }}
+      SHAREPOINT_ADMIN_URL: https://webscoutsteams-admin.sharepoint.com
+      CALLBACK_URL: https://automation.schulzemarketing.de/webhook/schulze-v2-sharepoint-sharing-callback
+      SHAREPOINT_TENANT: ${{ secrets.SHAREPOINT_TENANT }}
+      SHAREPOINT_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+      SHAREPOINT_CERTIFICATE_BASE64: ${{ secrets.SHAREPOINT_CERTIFICATE_BASE64 }}
+      SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.SHAREPOINT_CERTIFICATE_PASSWORD }}
+      CALLBACK_TOKEN: ${{ secrets.N8N_SHAREPOINT_CALLBACK_TOKEN }}
+
+    steps:
+      - name: Validate dispatch payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SITE_URL -notmatch '^https://webscoutsteams\.sharepoint\.com/sites/KD[0-9]+$') {
+            throw "Invalid SharePoint site URL."
+          }
+          if ($env:REQUEST_ID -notmatch '^sp-rec[A-Za-z0-9]{14}-[0-9a-fA-F-]{36}$') {
+            throw "Invalid request correlation ID."
+          }
+          foreach ($name in @(
+            'SHAREPOINT_TENANT',
+            'SHAREPOINT_CLIENT_ID',
+            'SHAREPOINT_CERTIFICATE_BASE64',
+            'SHAREPOINT_CERTIFICATE_PASSWORD',
+            'CALLBACK_TOKEN'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required protected environment secret is missing: $name"
+            }
+          }
+
+      - name: Install PnP PowerShell
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+
+      - name: Enable authenticated external sharing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $certPath = Join-Path $env:RUNNER_TEMP 'schulze-sharepoint-app.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:SHAREPOINT_CERTIFICATE_BASE64))
+            $certificatePassword = ConvertTo-SecureString $env:SHAREPOINT_CERTIFICATE_PASSWORD -AsPlainText -Force
+
+            Connect-PnPOnline -Url $env:SHAREPOINT_ADMIN_URL -ClientId $env:SHAREPOINT_CLIENT_ID -Tenant $env:SHAREPOINT_TENANT -CertificatePath $certPath -CertificatePassword $certificatePassword
+            Set-PnPTenantSite -Identity $env:SITE_URL -SharingCapability ExternalUserSharingOnly
+
+            $verified = $false
+            for ($attempt = 1; $attempt -le 12; $attempt++) {
+              $site = Get-PnPTenantSite -Identity $env:SITE_URL
+              if ([string]$site.SharingCapability -eq 'ExternalUserSharingOnly') {
+                $verified = $true
+                break
+              }
+              Start-Sleep -Seconds 10
+            }
+
+            if (-not $verified) {
+              throw "SharePoint did not report ExternalUserSharingOnly after verification retries."
+            }
+          }
+          finally {
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+            if (Test-Path $certPath) {
+              Remove-Item $certPath -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Callback to n8n
+        if: ${{ always() }}
+        shell: pwsh
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $status = switch ($env:JOB_STATUS) {
+            'success' { 'success' }
+            'cancelled' { 'cancelled' }
+            default { 'failure' }
+          }
+
+          $payload = @{
+            requestId = $env:REQUEST_ID
+            siteUrl   = $env:SITE_URL
+            status    = $status
+            runUrl    = $env:RUN_URL
+          } | ConvertTo-Json -Compress
+
+          Invoke-RestMethod -Method Post -Uri $env:CALLBACK_URL -Headers @{ Authorization = "Bearer $env:CALLBACK_TOKEN"; Accept = 'application/json' } -ContentType 'application/json' -Body $payload
