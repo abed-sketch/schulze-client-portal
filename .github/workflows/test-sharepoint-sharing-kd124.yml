@@ -81,46 +81,15 @@ jobs:
             [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:SHAREPOINT_CERTIFICATE_BASE64))
             $certificatePassword = ConvertTo-SecureString $env:SHAREPOINT_CERTIFICATE_PASSWORD -AsPlainText -Force
 
-            Import-Module PnP.PowerShell -ErrorAction Stop
-
-            # Acquire the SharePoint app-only token directly so authentication
-            # failures are distinguishable from SharePoint authorization failures.
-            $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-              $certPath,
-              $env:SHAREPOINT_CERTIFICATE_PASSWORD,
-              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
-            )
-
-            try {
-              $authority = "https://login.microsoftonline.com/$env:SHAREPOINT_TENANT"
-              $clientApp = [Microsoft.Identity.Client.ConfidentialClientApplicationBuilder]::Create($env:SHAREPOINT_CLIENT_ID).WithAuthority($authority).WithCertificate($cert).Build()
-              $tokenResult = $clientApp.AcquireTokenForClient(@("https://webscoutsteams.sharepoint.com/.default")).ExecuteAsync().GetAwaiter().GetResult()
-              if ([string]::IsNullOrWhiteSpace($tokenResult.AccessToken)) {
-                throw "Microsoft Entra returned an empty SharePoint access token."
-              }
-
-              $payloadPart = $tokenResult.AccessToken.Split('.')[1].Replace('-', '+').Replace('_', '/')
-              switch ($payloadPart.Length % 4) {
-                2 { $payloadPart += '==' }
-                3 { $payloadPart += '=' }
-              }
-              $claims = ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payloadPart))) | ConvertFrom-Json
-              $roles = @($claims.roles)
-              Write-Host ("SharePoint token audience: " + [string]$claims.aud)
-              Write-Host ("SharePoint application roles: " + (($roles | Sort-Object) -join ', '))
-
-              if ($roles -notcontains 'Sites.FullControl.All') {
-                throw "The Entra app can authenticate, but its SharePoint token does not contain Sites.FullControl.All. Add SharePoint -> Application permission -> Sites.FullControl.All and grant admin consent."
-              }
-            }
-            catch {
-              Write-Error ("SharePoint app-only token preflight failed: " + $_.Exception.Message)
-              throw
-            }
-
             Connect-PnPOnline -Url $env:SHAREPOINT_ADMIN_URL -ClientId $env:SHAREPOINT_CLIENT_ID -Tenant $env:SHAREPOINT_TENANT -CertificatePath $certPath -CertificatePassword $certificatePassword
 
-            $before = Get-PnPTenantSite -Identity $env:SITE_URL
+            try {
+              $before = Get-PnPTenantSite -Identity $env:SITE_URL -ErrorAction Stop
+            }
+            catch {
+              throw "SharePoint tenant-site access was rejected. Verify the Entra app has SharePoint (not Microsoft Graph) application permission Sites.FullControl.All, admin consent is granted, and the certificate uploaded to the app matches the GitHub PFX secret. Original error: $($_.Exception.Message)"
+            }
+
             Write-Host ("Before: " + [string]$before.SharingCapability)
 
             Set-PnPTenantSite -Identity $env:SITE_URL -SharingCapability ExternalUserSharingOnly
