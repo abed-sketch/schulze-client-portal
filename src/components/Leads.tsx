@@ -481,7 +481,7 @@ export function Leads({
       )}
 
       {editing && (
-        <div className="lead-editor-backdrop" role="presentation" onMouseDown={closeEditor}>
+        <div className="lead-editor-backdrop" onMouseDown={closeEditor}>
           <div
             className="lead-editor"
             role="dialog"
