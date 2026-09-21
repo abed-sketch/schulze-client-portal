@@ -22,6 +22,7 @@ jobs:
       SHAREPOINT_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
       SHAREPOINT_CERTIFICATE_BASE64: ${{ secrets.SHAREPOINT_CERTIFICATE_BASE64 }}
       SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.SHAREPOINT_CERTIFICATE_PASSWORD }}
+      CALLBACK_TOKEN: ${{ secrets.N8N_SHAREPOINT_CALLBACK_TOKEN }}
 
     steps:
       - name: Validate protected environment
@@ -32,12 +33,37 @@ jobs:
             'SHAREPOINT_TENANT',
             'SHAREPOINT_CLIENT_ID',
             'SHAREPOINT_CERTIFICATE_BASE64',
-            'SHAREPOINT_CERTIFICATE_PASSWORD'
+            'SHAREPOINT_CERTIFICATE_PASSWORD',
+            'CALLBACK_TOKEN'
           )) {
             if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
               throw "Required protected environment secret is missing: $name"
             }
           }
+
+      - name: Verify n8n callback authentication
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $payload = @{
+            requestId = 'sp-recEHjbbKipSXfj30-11111111-1111-4111-8111-111111111111'
+            siteUrl   = $env:SITE_URL
+            status    = 'success'
+            runUrl    = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          } | ConvertTo-Json -Compress
+
+          $headers = @{
+            Authorization = "Bearer $env:CALLBACK_TOKEN"
+            Accept = 'application/json'
+          }
+
+          $response = Invoke-WebRequest -Uri 'https://automation.schulzemarketing.de/webhook/schulze-v2-sharepoint-sharing-callback' -Method POST -Headers $headers -ContentType 'application/json' -Body $payload -SkipHttpErrorCheck
+
+          if ([int]$response.StatusCode -ne 409) {
+            throw "Expected authenticated callback to reach correlation validation and return HTTP 409, received HTTP $([int]$response.StatusCode)."
+          }
+
+          Write-Host 'Callback authentication accepted; correlation rejected as expected for the controlled probe.'
 
       - name: Install PnP PowerShell
         shell: pwsh
