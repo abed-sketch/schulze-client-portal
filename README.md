@@ -1,6 +1,6 @@
 # Schulze Client Portal
 
-One customer-facing React application for the LearningSuite Vertriebsportal. German/English lead overview with a DE/EN switch, responsive table/cards, search, status filter, sorting, safe external links and explicit loading/empty/error states.
+One customer-facing React application for the LearningSuite Vertriebsportal. German/English lead overview with a DE/EN switch, responsive table/cards, search, status filter, sorting, safe external links and explicit loading/empty/error states. Signed-in customer sessions can update an **existing** lead by adding an interaction and, when the backend allows it, changing its deal stage. The portal never exposes lead creation.
 
 ## Current delivery status
 
@@ -41,6 +41,23 @@ npm run test:production
 ```
 
 Browser tests intercept HTTPS API calls using fabricated fixtures. They prove frontend behavior, not a working Airtable/n8n integration. An optional `PLAYWRIGHT_CHROMIUM_EXECUTABLE` environment variable supports a locally installed Chromium.
+
+
+## Existing-lead editing boundary
+
+Customer editing is deliberately narrow:
+
+- Only signed-in LearningSuite customer sessions can see the edit action.
+- Legacy opaque-link sessions and the Schulze admin view remain read-only.
+- The browser requests a fresh LearningSuite token for each save; the token is never put into a URL, cookie, localStorage or sessionStorage.
+- The UI can only submit an existing Airtable Lead record ID already returned by the verified LearningSuite-scoped read model.
+- The write contract supports two operations only: create one interaction for that lead and/or request a deal-stage change.
+- There is no create-lead endpoint or button.
+- The n8n write workflow must re-verify LearningSuite identity, client scope and Airtable Lead → Target Company → Client ownership before writing.
+- Interaction writes use a request ID for replay/idempotency protection.
+- Backend failures are reduced to sanitized client-facing errors.
+
+See `docs/portal-existing-lead-editing.md` for the backend contract and release checklist.
 
 ## API contract
 
@@ -143,6 +160,7 @@ The raw token exists only in the in-memory provisioning path long enough to crea
 - `backend/README.md`: verified mapping and integration notes.
 - `backend/n8n/README.md`: live n8n IDs, security settings, provisioning and release checks.
 - `docs/superpowers/`: approved design and implementation plan.
+- `docs/frontend-handover.md`: presentation-layer ownership, safe edit boundaries and deployment handover.
 
 ## Preview
 

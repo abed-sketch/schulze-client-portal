@@ -1,7 +1,7 @@
 import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readToken, consumeToken } from "../src/api/token.ts";
-import { bootstrap, PortalError } from "../src/api/portal.ts";
+import { bootstrap, PortalError, updateExistingLead } from "../src/api/portal.ts";
 const token = "a".repeat(43);
 const originalFetch = globalThis.fetch;
 test("admin accepts more than 10000 aggregate leads while customers remain capped", async () => {
@@ -177,4 +177,70 @@ test("rejects malformed or cross-client admin responses", async () => {
     globalThis.fetch = async () => Response.json(body);
     await assert.rejects(bootstrap("https://api.test", token), isCode("service"));
   }
+});
+
+
+test("updates an existing lead with a fresh LearningSuite bearer and no selectors", async () => {
+  const leadId = "recBBBBBBBBBBBBBB";
+  const lsToken = "learning-suite-token";
+  globalThis.fetch = async (input, init) => {
+    assert.equal(String(input), "https://api.test/webhook/customer-portal/lead-update");
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("Authorization"), `Bearer ${lsToken}`);
+    assert.equal(headers.get("Content-Type"), "application/json");
+    assert.equal(init?.method, "POST");
+    assert.equal(init?.credentials, "omit");
+    assert.equal(init?.cache, "no-store");
+    assert.equal(init?.redirect, "error");
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.leadId, leadId);
+    assert.equal(body.interactionText, "Follow-up call completed");
+    assert.equal(body.dealPhase, "Qualified");
+    assert.match(body.requestId, /^[A-Za-z0-9_-]{8,64}$/);
+    return Response.json({
+      ok: true,
+      leadId,
+      interaction: { requested: true, created: true, reused: false },
+      dealPhase: { requested: "Qualified", updated: true, previous: "Contacted" },
+    });
+  };
+  const result = await updateExistingLead("https://api.test/webhook", lsToken, {
+    requestId: "req_test_1234",
+    leadId,
+    interactionText: " Follow-up call completed ",
+    dealPhase: "Qualified",
+    interactionDate: "2026-09-21T09:00:00.000Z",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.leadId, leadId);
+  assert.equal(result.interaction.created, true);
+  assert.equal(result.dealPhase.updated, true);
+});
+
+test("lead update rejects legacy ids, invalid LearningSuite tokens and backend details", async () => {
+  await assert.rejects(
+    updateExistingLead("https://api.test/webhook", "token", {
+      requestId: "req_test_1234",
+      leadId: "lead-1",
+      interactionText: "hello",
+    }),
+    isCode("service"),
+  );
+  await assert.rejects(
+    updateExistingLead("https://api.test/webhook", "bad token", {
+      requestId: "req_test_1234",
+      leadId: "recBBBBBBBBBBBBBB",
+      interactionText: "hello",
+    }),
+    isCode("ls-required"),
+  );
+  globalThis.fetch = async () => new Response("sensitive Airtable detail", { status: 503 });
+  await assert.rejects(
+    updateExistingLead("https://api.test/webhook", "learning-suite-token", {
+      requestId: "req_test_1234",
+      leadId: "recBBBBBBBBBBBBBB",
+      interactionText: "hello",
+    }),
+    isCode("service"),
+  );
 });
