@@ -1,0 +1,80 @@
+name: Enable SharePoint external sharing
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: Exact customer SharePoint site URL
+        required: true
+        type: string
+      request_id:
+        description: Optional n8n correlation ID
+        required: false
+        type: string
+  repository_dispatch:
+    types: [enable-sharepoint-sharing]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sharepoint-sharing-${{ github.event.inputs.site_url || github.event.client_payload.site_url || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  enable-sharing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sharepoint-production
+    env:
+      SITE_URL: ${{ github.event.inputs.site_url || github.event.client_payload.site_url }}
+      REQUEST_ID: ${{ github.event.inputs.request_id || github.event.client_payload.request_id }}
+      SHAREPOINT_ADMIN_URL: ${{ secrets.SHAREPOINT_ADMIN_URL }}
+      SHAREPOINT_TENANT_ID: ${{ secrets.SHAREPOINT_TENANT_ID }}
+      SHAREPOINT_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+      SHAREPOINT_CERTIFICATE_BASE64: ${{ secrets.SHAREPOINT_CERTIFICATE_BASE64 }}
+      SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.SHAREPOINT_CERTIFICATE_PASSWORD }}
+      N8N_SHAREPOINT_CALLBACK_URL: ${{ secrets.N8N_SHAREPOINT_CALLBACK_URL }}
+      N8N_SHAREPOINT_CALLBACK_TOKEN: ${{ secrets.N8N_SHAREPOINT_CALLBACK_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate dispatch input
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SITE_URL"
+          test -n "$SHAREPOINT_ADMIN_URL"
+          test -n "$SHAREPOINT_TENANT_ID"
+          test -n "$SHAREPOINT_CLIENT_ID"
+          test -n "$SHAREPOINT_CERTIFICATE_BASE64"
+          test -n "$SHAREPOINT_CERTIFICATE_PASSWORD"
+
+      - name: Install PnP.PowerShell
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber
+
+      - name: Enable and verify site sharing
+        shell: pwsh
+        run: |
+          ./scripts/enable-sharepoint-site-sharing.ps1 `
+            -SiteUrl $env:SITE_URL `
+            -AdminUrl $env:SHAREPOINT_ADMIN_URL `
+            -TenantId $env:SHAREPOINT_TENANT_ID `
+            -ClientId $env:SHAREPOINT_CLIENT_ID `
+            -CertificateBase64 $env:SHAREPOINT_CERTIFICATE_BASE64 `
+            -CertificatePassword $env:SHAREPOINT_CERTIFICATE_PASSWORD
+
+      - name: Report result to n8n
+        if: always() && env.N8N_SHAREPOINT_CALLBACK_URL != '' && env.N8N_SHAREPOINT_CALLBACK_TOKEN != ''
+        shell: bash
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body="$(jq -nc             --arg requestId "$REQUEST_ID"             --arg siteUrl "$SITE_URL"             --arg status "$JOB_STATUS"             --arg runUrl "$RUN_URL"             '{requestId:$requestId,siteUrl:$siteUrl,status:$status,runUrl:$runUrl}')"
+          curl --fail-with-body --silent --show-error             --request POST             --header "Authorization: Bearer $N8N_SHAREPOINT_CALLBACK_TOKEN"             --header "Content-Type: application/json"             --data "$body"             "$N8N_SHAREPOINT_CALLBACK_URL"
