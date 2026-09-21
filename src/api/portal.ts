@@ -27,6 +27,21 @@ export type BootstrapResponse = {
   clients: PortalClient[];
   leads: Lead[];
 };
+
+export type LeadUpdateInput = {
+  requestId: string;
+  leadId: string;
+  interactionText?: string;
+  dealPhase?: string;
+  interactionDate?: string;
+};
+
+export type LeadUpdateResponse = {
+  ok: true;
+  leadId: string;
+  interaction: { requested: boolean; created: boolean; reused: boolean };
+  dealPhase: { requested: string | null; updated: boolean; previous: string | null };
+};
 export type ErrorCode =
   | "ls-required"
   | "not-provisioned"
@@ -218,5 +233,98 @@ export async function bootstrapLearningSuite(token: string, signal?: AbortSignal
     if(timeout.aborted) throw new PortalError('timeout');
     if(error instanceof PortalError) throw error;
     throw new PortalError('service');
+  }
+}
+
+
+function apiBase(base: string): URL {
+  let url: URL;
+  try {
+    url = new URL(base);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error();
+  } catch {
+    throw new PortalError("configuration");
+  }
+  return url;
+}
+
+export async function updateExistingLead(
+  base: string,
+  learningSuiteToken: string,
+  input: LeadUpdateInput,
+  signal?: AbortSignal,
+): Promise<LeadUpdateResponse> {
+  const url = apiBase(base);
+  if (!/^[^\s]{1,16384}$/.test(learningSuiteToken))
+    throw new PortalError("ls-required");
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(input.requestId))
+    throw new PortalError("service");
+  if (!/^rec[A-Za-z0-9]{14}$/.test(input.leadId))
+    throw new PortalError("service");
+
+  const interactionText = input.interactionText?.trim() || "";
+  const dealPhase = input.dealPhase?.trim() || "";
+  if (!interactionText && !dealPhase) throw new PortalError("service");
+  if (interactionText.length > 5000 || dealPhase.length > 100)
+    throw new PortalError("service");
+
+  url.pathname =
+    url.pathname.replace(/\/$/, "") + "/customer-portal/lead-update";
+  const timeout = AbortSignal.timeout(25000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${learningSuiteToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requestId: input.requestId,
+        leadId: input.leadId,
+        interactionText,
+        dealPhase,
+        interactionDate: input.interactionDate || new Date().toISOString(),
+      }),
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+
+    if (response.status === 401) throw new PortalError("ls-required");
+    if (response.status === 403) throw new PortalError("not-provisioned");
+    if (response.status === 429) throw new PortalError("rate-limit");
+    if (!response.ok) throw new PortalError("service");
+
+    const value: unknown = await response.json();
+    if (
+      !record(value) ||
+      value.ok !== true ||
+      typeof value.leadId !== "string" ||
+      value.leadId !== input.leadId ||
+      !record(value.interaction) ||
+      typeof value.interaction.requested !== "boolean" ||
+      typeof value.interaction.created !== "boolean" ||
+      typeof value.interaction.reused !== "boolean" ||
+      !record(value.dealPhase) ||
+      typeof value.dealPhase.updated !== "boolean"
+    )
+      throw new PortalError("service");
+
+    return value as LeadUpdateResponse;
+  } catch (e) {
+    if (signal?.aborted) throw signal.reason;
+    if (timeout.aborted) throw new PortalError("timeout");
+    if (e instanceof PortalError) throw e;
+    throw new PortalError("service");
   }
 }
