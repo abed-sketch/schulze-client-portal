@@ -112,6 +112,8 @@ test('customer can add an interaction and change the deal stage for an existing 
   await expect(app.locator('.lead-editor')).toBeVisible();
   await app.getByLabel('Neue Interaktion').fill('Kunde bestätigt den nächsten Schritt.');
   await app.getByRole('button',{name:'Speichern',exact:true}).click();
+  await page.waitForTimeout(500);
+  console.log('lead-save-debug', updateBody, await app.locator('.editor-error').allTextContents(), browserErrors);
   await expect(app.getByText('Änderung gespeichert. Die Übersicht aktualisiert sich automatisch.')).toBeVisible();
   expect(updateBody).toMatchObject({
     leadId:'recBBBBBBBBBBBBBB',
