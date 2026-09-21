@@ -91,6 +91,8 @@ test('portal bridge waits for LearningSuite authManager initialization',async({p
 
 
 test('customer can add an interaction and change the deal stage for an existing lead only', async ({page}) => {
+  const browserErrors:string[]=[];
+  page.on('pageerror',error=>browserErrors.push(error.message));
   let updateBody:any = null;
   await page.route(endpoint, route => route.fulfill({json:response('a','Alpha')}));
   await page.route('https://portal-api.test/webhook/customer-portal/lead-update', async route => {
@@ -106,7 +108,8 @@ test('customer can add an interaction and change the deal stage for an existing 
   const app=await embed(page);
   await expect(app.getByRole('button',{name:'Aktualisieren'})).toBeVisible();
   await app.getByRole('button',{name:'Aktualisieren'}).click();
-  await expect(app.getByRole('dialog')).toBeVisible();
+  console.log('lead-editor-debug', await app.locator('.lead-editor').count(), browserErrors);
+  await expect(app.locator('.lead-editor')).toBeVisible();
   await app.getByLabel('Neue Interaktion').fill('Kunde bestätigt den nächsten Schritt.');
   await app.getByRole('button',{name:'Speichern',exact:true}).click();
   await expect(app.getByText('Änderung gespeichert. Die Übersicht aktualisiert sich automatisch.')).toBeVisible();
