@@ -25,7 +25,13 @@ Use a dedicated app registration for the SharePoint automation.
 
 Configure certificate-based application authentication and upload the generated public `.cer` file.
 
-The app must have the SharePoint application permission required for tenant-site administration, with administrator consent. Keep this app dedicated to the site-sharing automation.
+The app must have **SharePoint** (not Microsoft Graph) **Application permission `Sites.FullControl.All`**, with tenant administrator consent granted. This is required because the workflow calls SharePoint tenant-administration cmdlets such as `Get-PnPTenantSite` and `Set-PnPTenantSite`.
+
+In Entra admin center use:
+
+`App registrations → n8n - Schulze OS SharePoint Publisher → API permissions → Add a permission → SharePoint → Application permissions → Sites.FullControl.All → Add permissions → Grant admin consent`
+
+Keep this app dedicated to the site-sharing automation.
 
 Record:
 - Tenant ID or tenant domain
