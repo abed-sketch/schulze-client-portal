@@ -160,6 +160,7 @@ The raw token exists only in the in-memory provisioning path long enough to crea
 - `backend/README.md`: verified mapping and integration notes.
 - `backend/n8n/README.md`: live n8n IDs, security settings, provisioning and release checks.
 - `docs/superpowers/`: approved design and implementation plan.
+- `docs/frontend-handover.md`: presentation-layer ownership, safe edit boundaries and deployment handover.
 
 ## Preview
 
