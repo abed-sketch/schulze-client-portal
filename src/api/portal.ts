@@ -220,3 +220,152 @@ export async function bootstrapLearningSuite(token: string, signal?: AbortSignal
     throw new PortalError('service');
   }
 }
+
+
+export type LeadOptionsResponse = {
+  dealPhaseField: string;
+  dealPhaseChoices: string[];
+};
+
+export type LeadUpdateInput = {
+  requestId: string;
+  leadId: string;
+  interactionText?: string;
+  dealPhase?: string;
+};
+
+export type LeadUpdateResponse = {
+  ok: true;
+  leadId: string;
+  interaction: { requested: boolean; created: boolean; reused: boolean };
+  dealPhase: { requested: string | null; updated: boolean; previous: string | null };
+};
+
+function n8nEndpoint(base: string, path: string): URL {
+  let url: URL;
+  try {
+    url = new URL(base);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) throw new Error();
+  } catch {
+    throw new PortalError("configuration");
+  }
+  url.pathname = url.pathname.replace(/\/$/, "") + path;
+  return url;
+}
+
+function learningSuiteBearer(token: string): string {
+  if (!/^[^\s]{1,16384}$/.test(token)) throw new PortalError("ls-required");
+  return `Bearer ${token}`;
+}
+
+function writeError(status: number): never {
+  if (status === 401) throw new PortalError("ls-required");
+  if (status === 403) throw new PortalError("not-provisioned");
+  if (status === 429) throw new PortalError("rate-limit");
+  throw new PortalError("service");
+}
+
+export async function getLeadOptions(
+  base: string,
+  learningSuiteToken: string,
+  signal?: AbortSignal,
+): Promise<LeadOptionsResponse> {
+  const url = n8nEndpoint(base, "/customer-portal/lead-options");
+  const timeout = AbortSignal.timeout(20000);
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: learningSuiteBearer(learningSuiteToken),
+        Accept: "application/json",
+      },
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    if (!response.ok) writeError(response.status);
+    const body: unknown = await response.json();
+    if (
+      !record(body) ||
+      body.ok !== true ||
+      typeof body.dealPhaseField !== "string" ||
+      !body.dealPhaseField ||
+      !Array.isArray(body.dealPhaseChoices) ||
+      !body.dealPhaseChoices.length ||
+      body.dealPhaseChoices.length > 100 ||
+      body.dealPhaseChoices.some((x) => typeof x !== "string" || !x.trim())
+    ) throw new PortalError("service");
+    return {
+      dealPhaseField: body.dealPhaseField,
+      dealPhaseChoices: [...new Set(body.dealPhaseChoices as string[])],
+    };
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    if (timeout.aborted) throw new PortalError("timeout");
+    if (error instanceof PortalError) throw error;
+    throw new PortalError("service");
+  }
+}
+
+export async function updateExistingLead(
+  base: string,
+  learningSuiteToken: string,
+  input: LeadUpdateInput,
+  signal?: AbortSignal,
+): Promise<LeadUpdateResponse> {
+  if (!recordId.test(input.leadId)) throw new PortalError("service");
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(input.requestId))
+    throw new PortalError("service");
+  const interactionText = (input.interactionText || "").trim();
+  const dealPhase = (input.dealPhase || "").trim();
+  if (!interactionText && !dealPhase) throw new PortalError("service");
+  if (interactionText.length > 5000 || dealPhase.length > 100)
+    throw new PortalError("service");
+
+  const url = n8nEndpoint(base, "/customer-portal/lead-update");
+  const timeout = AbortSignal.timeout(20000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: learningSuiteBearer(learningSuiteToken),
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requestId: input.requestId,
+        leadId: input.leadId,
+        interactionText,
+        dealPhase,
+      }),
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "error",
+      referrerPolicy: "no-referrer",
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    if (!response.ok) writeError(response.status);
+    const body: unknown = await response.json();
+    if (
+      !record(body) ||
+      body.ok !== true ||
+      body.leadId !== input.leadId ||
+      !record(body.interaction) ||
+      !record(body.dealPhase)
+    ) throw new PortalError("service");
+    return body as unknown as LeadUpdateResponse;
+  } catch (error) {
+    if (signal?.aborted) throw signal.reason;
+    if (timeout.aborted) throw new PortalError("timeout");
+    if (error instanceof PortalError) throw error;
+    throw new PortalError("service");
+  }
+}
