@@ -1,6 +1,15 @@
 import { useLanguage } from "../i18n";
 import { useMemo, useState } from "react";
-import type { Lead, PortalClient, PortalMode } from "../api/portal";
+import {
+  getLeadOptions,
+  PortalError,
+  updateExistingLead,
+  type Lead,
+  type LeadOptionsResponse,
+  type PortalClient,
+  type PortalMode,
+} from "../api/portal";
+import { requestLearningSuiteToken } from "../api/learningSuite";
 
 const value = (s: string | null) => s?.trim() || "—";
 type SortKey = "name" | "status" | "source" | "clientName";
@@ -76,20 +85,31 @@ export function Leads({
   mode,
   showClientFilter = false,
   clients,
+  editable = false,
 }: {
   leads: Lead[];
   mode: PortalMode;
   showClientFilter?: boolean;
   clients: PortalClient[];
+  editable?: boolean;
 }) {
   const { t, language } = useLanguage();
   const isAdmin = mode === "admin";
+  const canEdit = editable && !isAdmin;
   const showClients = isAdmin || showClientFilter || clients.length > 1;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [client, setClient] = useState("");
   const [sort, setSort] = useState<SortKey>(showClients ? "clientName" : "name");
   const [desc, setDesc] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [dealPhase, setDealPhase] = useState("");
+  const [interaction, setInteraction] = useState("");
+  const [options, setOptions] = useState<LeadOptionsResponse | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editorMessage, setEditorMessage] = useState("");
+  const [editorError, setEditorError] = useState("");
 
   const statuses = useMemo(
     () =>
@@ -128,9 +148,83 @@ export function Leads({
       );
   }, [leads, search, status, client, sort, desc, language]);
 
+  const selectedLead = editId ? leads.find((l) => l.id === editId) || null : null;
+
   function changeSort(key: SortKey) {
     setDesc(sort === key ? !desc : false);
     setSort(key);
+  }
+
+  async function openEditor(lead: Lead) {
+    if (!canEdit) return;
+    setEditId(lead.id);
+    setDealPhase(lead.status || "");
+    setInteraction("");
+    setEditorError("");
+    setEditorMessage("");
+    if (options) return;
+    setOptionsLoading(true);
+    try {
+      const token = await requestLearningSuiteToken();
+      const loaded = await getLeadOptions(
+        import.meta.env.VITE_API_BASE_URL || "",
+        token,
+      );
+      setOptions(loaded);
+    } catch (error) {
+      setEditorError(
+        t(
+          error instanceof PortalError && error.code === "not-provisioned"
+            ? "Dieser Lead kann mit Ihrem Zugang nicht geändert werden."
+            : "Die Bearbeitungsoptionen konnten nicht geladen werden.",
+        ),
+      );
+    } finally {
+      setOptionsLoading(false);
+    }
+  }
+
+  async function saveEditor() {
+    if (!selectedLead || !canEdit || saving) return;
+    const text = interaction.trim();
+    const phase =
+      dealPhase.trim() && dealPhase.trim() !== (selectedLead.status || "")
+        ? dealPhase.trim()
+        : "";
+    if (!text && !phase) {
+      setEditorError(t("Bitte fügen Sie eine Interaktion hinzu oder ändern Sie die Dealphase."));
+      return;
+    }
+    setSaving(true);
+    setEditorError("");
+    setEditorMessage("");
+    try {
+      const token = await requestLearningSuiteToken();
+      await updateExistingLead(
+        import.meta.env.VITE_API_BASE_URL || "",
+        token,
+        {
+          requestId: crypto.randomUUID(),
+          leadId: selectedLead.id,
+          interactionText: text,
+          dealPhase: phase,
+        },
+      );
+      setInteraction("");
+      setEditorMessage(
+        t("Gespeichert. Die Änderung erscheint nach der nächsten Synchronisierung in der Übersicht."),
+      );
+    } catch (error) {
+      setEditorError(
+        t(
+          error instanceof PortalError && error.code === "not-provisioned"
+            ? "Dieser Lead kann mit Ihrem Zugang nicht geändert werden."
+            : "Die Änderung konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   const heading = (key: SortKey, label: string) => (
@@ -163,7 +257,11 @@ export function Leads({
         </div>
         <span className="read-only">
           <span aria-hidden="true">◉</span>{" "}
-          {isAdmin ? t("Team-Leseansicht") : t("Leseansicht")}
+          {isAdmin
+            ? t("Team-Leseansicht")
+            : canEdit
+              ? t("Interaktionen & Dealphase")
+              : t("Leseansicht")}
         </span>
       </div>
 
@@ -172,6 +270,15 @@ export function Leads({
           <strong>{t("Admin-Leseansicht")}</strong>
           <span>
             {t("Dieser geschützte Zugang zeigt Leads aller Kunden. Änderungen sind hier nicht möglich.")}
+          </span>
+        </div>
+      )}
+
+      {canEdit && (
+        <div className="editable-note" role="note">
+          <strong>{t("Bestehende Leads pflegen")}</strong>
+          <span>
+            {t("Sie können eine Interaktion ergänzen oder die Dealphase ändern. Neue Leads können hier nicht angelegt werden.")}
           </span>
         </div>
       )}
@@ -238,11 +345,72 @@ export function Leads({
         </label>
       </div>
 
+      {canEdit && selectedLead && (
+        <div className="lead-editor" aria-live="polite">
+          <div className="lead-editor-header">
+            <div>
+              <span>{t("Bestehenden Lead aktualisieren")}</span>
+              <h3>{selectedLead.name}</h3>
+            </div>
+            <button
+              type="button"
+              className="editor-close"
+              onClick={() => setEditId(null)}
+              aria-label={t("Schließen")}
+            >
+              ×
+            </button>
+          </div>
+          <div className="lead-editor-grid">
+            <label>
+              <span>{t("Dealphase")}</span>
+              <select
+                value={dealPhase}
+                onChange={(e) => setDealPhase(e.target.value)}
+                disabled={optionsLoading || saving}
+              >
+                {!options?.dealPhaseChoices.includes(dealPhase) && dealPhase && (
+                  <option value={dealPhase}>{t(dealPhase)}</option>
+                )}
+                {(options?.dealPhaseChoices || []).map((choice) => (
+                  <option value={choice} key={choice}>{t(choice)}</option>
+                ))}
+              </select>
+              {optionsLoading && <small>{t("Dealphasen werden geladen …")}</small>}
+            </label>
+            <label>
+              <span>{t("Neue Interaktion")}</span>
+              <textarea
+                value={interaction}
+                onChange={(e) => setInteraction(e.target.value)}
+                maxLength={5000}
+                rows={4}
+                placeholder={t("Kurze Notiz zur neuen Interaktion …")}
+                disabled={saving}
+              />
+            </label>
+          </div>
+          {editorError && <p className="editor-error" role="alert">{editorError}</p>}
+          {editorMessage && <p className="editor-message" role="status">{editorMessage}</p>}
+          <div className="editor-actions">
+            <button type="button" className="secondary" onClick={() => setEditId(null)} disabled={saving}>
+              {t("Abbrechen")}
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => void saveEditor()}
+              disabled={saving || optionsLoading || !options}
+            >
+              {saving ? t("Wird gespeichert …") : t("Änderung speichern")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {!filtered.length ? (
         <div className="empty">
-          <div className="state-icon" aria-hidden="true">
-            ⌕
-          </div>
+          <div className="state-icon" aria-hidden="true">⌕</div>
           <h3>
             {leads.length
               ? t("Keine passenden Interessenten")
@@ -287,43 +455,37 @@ export function Leads({
                   <th>{t("Position")}</th>
                   {heading("source", t("Quelle"))}
                   <th>{t("Notizen")}</th>
+                  {canEdit && <th>{t("Aktion")}</th>}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((l) => (
                   <tr key={l.id}>
                     {showClients && (
-                      <td>
-                        <span className="client-chip">{value(l.clientName)}</span>
-                      </td>
+                      <td><span className="client-chip">{value(l.clientName)}</span></td>
                     )}
                     <td>
                       <div className="lead-name">
-                        <span className="avatar" aria-hidden="true">
-                          {l.name.trim().slice(0, 1)}
-                        </span>
+                        <span className="avatar" aria-hidden="true">{l.name.trim().slice(0, 1)}</span>
                         <div>
                           <strong>{l.name}</strong>
                           <small>{value(l.contactName)}</small>
                         </div>
                       </div>
                     </td>
-                    <td>
-                      <Badge status={l.status} />
-                    </td>
-                    <td>
-                      <Contact lead={l} />
-                    </td>
-                    <td>
-                      <Website url={l.website} />
-                    </td>
+                    <td><Badge status={l.status} /></td>
+                    <td><Contact lead={l} /></td>
+                    <td><Website url={l.website} /></td>
                     <td>{value(l.position)}</td>
-                    <td>
-                      <span className="source">{value(l.source)}</span>
-                    </td>
-                    <td>
-                      <Notes notes={l.notes} />
-                    </td>
+                    <td><span className="source">{value(l.source)}</span></td>
+                    <td><Notes notes={l.notes} /></td>
+                    {canEdit && (
+                      <td>
+                        <button type="button" className="edit-lead" onClick={() => void openEditor(l)}>
+                          {t("Aktualisieren")}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -343,38 +505,20 @@ export function Leads({
                   {showClients && (
                     <div className="wide">
                       <dt>{t("Kunde")}</dt>
-                      <dd>
-                        <span className="client-chip">{value(l.clientName)}</span>
-                      </dd>
+                      <dd><span className="client-chip">{value(l.clientName)}</span></dd>
                     </div>
                   )}
-                  <div>
-                    <dt>{t("Kontakt")}</dt>
-                    <dd>
-                      <Contact lead={l} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t("Website")}</dt>
-                    <dd>
-                      <Website url={l.website} />
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t("Position")}</dt>
-                    <dd>{value(l.position)}</dd>
-                  </div>
-                  <div>
-                    <dt>{t("Quelle")}</dt>
-                    <dd>{value(l.source)}</dd>
-                  </div>
-                  <div className="wide">
-                    <dt>{t("Notizen")}</dt>
-                    <dd>
-                      <Notes notes={l.notes} />
-                    </dd>
-                  </div>
+                  <div><dt>{t("Kontakt")}</dt><dd><Contact lead={l} /></dd></div>
+                  <div><dt>{t("Website")}</dt><dd><Website url={l.website} /></dd></div>
+                  <div><dt>{t("Position")}</dt><dd>{value(l.position)}</dd></div>
+                  <div><dt>{t("Quelle")}</dt><dd>{value(l.source)}</dd></div>
+                  <div className="wide"><dt>{t("Notizen")}</dt><dd><Notes notes={l.notes} /></dd></div>
                 </dl>
+                {canEdit && (
+                  <button type="button" className="edit-lead card-edit" onClick={() => void openEditor(l)}>
+                    {t("Lead aktualisieren")}
+                  </button>
+                )}
               </article>
             ))}
           </div>
