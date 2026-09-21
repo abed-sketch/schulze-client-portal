@@ -409,7 +409,11 @@ export function Leads({
                     {canEdit && !isAdmin && (
                       <td>
                         {editable(l) ? (
-                          <button className="edit-lead" onClick={() => openEditor(l)}>
+                          <button
+                            className="edit-lead"
+                            onPointerDown={() => openEditor(l)}
+                            onClick={() => openEditor(l)}
+                          >
                             {t("Aktualisieren")}
                           </button>
                         ) : (
@@ -470,7 +474,11 @@ export function Leads({
                   </div>
                 </dl>
                 {editable(l) && (
-                  <button className="edit-lead card-edit" onClick={() => openEditor(l)}>
+                  <button
+                    className="edit-lead card-edit"
+                    onPointerDown={() => openEditor(l)}
+                    onClick={() => openEditor(l)}
+                  >
                     {t("Interaktion hinzufügen / Dealphase ändern")}
                   </button>
                 )}
