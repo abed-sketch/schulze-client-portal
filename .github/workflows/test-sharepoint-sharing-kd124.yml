@@ -1,0 +1,85 @@
+name: Controlled SharePoint sharing test KD124
+
+on:
+  push:
+    branches:
+      - test/sharepoint-sharing-kd124-20260921
+    paths:
+      - .github/workflows/test-sharepoint-sharing-kd124.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test-sharing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: sharepoint-production
+    env:
+      SITE_URL: https://webscoutsteams.sharepoint.com/sites/KD124
+      SHAREPOINT_ADMIN_URL: https://webscoutsteams-admin.sharepoint.com
+      SHAREPOINT_TENANT: ${{ secrets.SHAREPOINT_TENANT }}
+      SHAREPOINT_CLIENT_ID: ${{ secrets.SHAREPOINT_CLIENT_ID }}
+      SHAREPOINT_CERTIFICATE_BASE64: ${{ secrets.SHAREPOINT_CERTIFICATE_BASE64 }}
+      SHAREPOINT_CERTIFICATE_PASSWORD: ${{ secrets.SHAREPOINT_CERTIFICATE_PASSWORD }}
+
+    steps:
+      - name: Validate protected environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in @(
+            'SHAREPOINT_TENANT',
+            'SHAREPOINT_CLIENT_ID',
+            'SHAREPOINT_CERTIFICATE_BASE64',
+            'SHAREPOINT_CERTIFICATE_PASSWORD'
+          )) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required protected environment secret is missing: $name"
+            }
+          }
+
+      - name: Install PnP PowerShell
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PnP.PowerShell -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+
+      - name: Enable and verify external sharing on KD124
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $certPath = Join-Path $env:RUNNER_TEMP 'schulze-sharepoint-test.pfx'
+          try {
+            [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:SHAREPOINT_CERTIFICATE_BASE64))
+            $certificatePassword = ConvertTo-SecureString $env:SHAREPOINT_CERTIFICATE_PASSWORD -AsPlainText -Force
+
+            Connect-PnPOnline -Url $env:SHAREPOINT_ADMIN_URL -ClientId $env:SHAREPOINT_CLIENT_ID -Tenant $env:SHAREPOINT_TENANT -CertificatePath $certPath -CertificatePassword $certificatePassword
+
+            $before = Get-PnPTenantSite -Identity $env:SITE_URL
+            Write-Host ("Before: " + [string]$before.SharingCapability)
+
+            Set-PnPTenantSite -Identity $env:SITE_URL -SharingCapability ExternalUserSharingOnly
+
+            $verified = $false
+            for ($attempt = 1; $attempt -le 12; $attempt++) {
+              $site = Get-PnPTenantSite -Identity $env:SITE_URL
+              Write-Host ("Verification attempt " + $attempt + ": " + [string]$site.SharingCapability)
+              if ([string]$site.SharingCapability -eq 'ExternalUserSharingOnly') {
+                $verified = $true
+                break
+              }
+              Start-Sleep -Seconds 10
+            }
+
+            if (-not $verified) {
+              throw "SharePoint did not report ExternalUserSharingOnly after verification retries."
+            }
+          }
+          finally {
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+            if (Test-Path $certPath) {
+              Remove-Item $certPath -Force -ErrorAction SilentlyContinue
+            }
+          }
