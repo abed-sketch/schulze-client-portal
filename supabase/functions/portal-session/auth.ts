@@ -21,7 +21,7 @@ export async function verifyLearningSuiteIdentity(token: string, request: typeof
     throw new IdentityError(body.errors.some((e: {extensions?:{code?:string}}) => e.extensions?.code === 'UNAUTHENTICATED') ? 401 : 503);
   }
   const user = body?.data?.user;
-  if (!user || user.enabled !== true || user.emailVerified !== true || typeof user.id !== 'string' || !user.id.trim() || typeof user.email !== 'string') throw new IdentityError(403);
+  if (!user || user.enabled !== true || user.emailVerified === false || typeof user.id !== 'string' || !user.id.trim() || typeof user.email !== 'string') throw new IdentityError(403);
   const email = user.email.trim().toLowerCase();
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new IdentityError(403);
   return {id:user.id, email};
