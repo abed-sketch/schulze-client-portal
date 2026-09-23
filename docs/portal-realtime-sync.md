@@ -1,6 +1,6 @@
 # Portal realtime sync
 
-Deployed 2026-09-17 in Peer Jakob Schulze's n8n project and Supabase `zwtmlrzwqnluosrdbjfv`.
+Deployed 2026-09-17 in the Schulze Marketing n8n project and its dedicated Supabase project.
 
 ## Runtime
 
@@ -20,7 +20,7 @@ The browser already subscribes to Supabase's non-sensitive invalidation signal a
 - Apply the four `20260917*_portal_realtime_*` / `portal_hook_maintenance_lease` migrations in timestamp order. The registry, dedup queue, health state and lease RPCs are service-only with forced RLS.
 - Deploy both files under `supabase/functions/portal-airtable-events`, with entrypoint `index.ts`. `verify_jwt=false` is intentional: `/notify` verifies the exact raw-body Airtable HMAC, base, hook ID and timestamp; private routes verify the existing n8n integration bearer against its stored SHA-256 digest.
 - The Airtable native credential requires `webhook:manage`, `data.records:read`, `schema.bases:read` and Creator access to the base. Existing approved write operations use the existing write scope.
-- Use the native **Schulze x Apex Airtable** and **Schulze Portal Supabase** n8n credentials; never place their values in Code nodes, source files or browser configuration.
+- Use the dedicated Airtable and Schulze Portal Supabase n8n credentials; never place their values in Code nodes, source files or browser configuration.
 - Create the worker, bind credentials, apply `backend/n8n/realtime.settings.json`, and add its ID to the snapshot caller allowlist before publishing. Update IDs deliberately if installing into another instance.
 - Create maintenance and apply its privacy settings **before the first run**: success/error retention `none`, manual retention `false`, execution progress `false`, timeout 120 seconds. MAC keys pass directly from the native Airtable HTTP response to Supabase Vault. They cannot be retrieved again from Airtable.
 - Maintenance claims an exclusive five-minute database lease before reading registries. Its enforced 120-second timeout is shorter than the lease. One-item batches persist each signing key before processing another table. Do not increase this timeout beyond the lease or bypass the claim.
@@ -46,7 +46,7 @@ Normally the queue drains (`dirty_seq = completed_seq`), maintenance reports `re
 
 Portal Access is authoritative for explicit grants after its first successful discovery. Admin needs `Role=Admin`, checked `Active`, and no Client link. Client needs `Role=Client`, checked `Active`, and one valid Client link. Primary Contact access remains automatic. A Client row without a linked company grants nothing; no ownership is guessed. Legacy opaque bearer-link grants remain separately controlled by their n8n grant registry.
 
-`abed@apex-consulting.ai` was explicitly added to Portal Access as requested and verified as admin. The Gmail entry was read back as `Role=Admin`, active, with no Client link on 2026-09-17; it was not overwritten. To make it a client, change its role and assign the intended company in Airtable.
+Explicit administrator access is managed in Airtable Portal Access. Personal administrator names and email addresses are intentionally not documented in this repository.
 
 ## Verification
 

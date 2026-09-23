@@ -12,7 +12,7 @@ The Airtable → Supabase snapshot workflow is active every five minutes, and th
 
 No real customer onboarding or new production grant was issued during this cutover. The real LearningSuite customer iframe and populated two-customer isolation remain operator acceptance checks; automated browser tests use synthetic fixtures.
 
-Live V2 metadata was verified on 2026-09-17: Leads → Target Company links to Target Companies; Target Companies → Client links to Clients; Leads → Linked Person links to People. User-approved test data now provides **nine owned leads across three clients**, including a Schulze IT test client linked to `it@schulzemarketing.de`. Live scoped reads verified three leads per client and nine in the admin model. The original three unowned leads remain unchanged and excluded. See `docs/portal-supabase-sync.md` for fixture details. A populated two-customer isolation test requires suitable V2 data; do not manufacture customer data just to satisfy this check.
+Live V2 metadata was verified on 2026-09-17. Portal isolation and scoped-read behavior were tested with synthetic fixtures; production customer data is not documented in this repository. See `docs/portal-supabase-sync.md` for the architecture and verification approach.
 
 ## Languages
 

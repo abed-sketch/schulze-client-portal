@@ -13,15 +13,15 @@ Use these exact fields:
 - Active: checkbox, unchecked by default
 - Notes: long text
 
-Create or update one record:
-Access Name: Abed — Portal Admin
-Email: abed@apex-consulting.ai
+Create administrator or additional client access records only for authorized users. Do not hard-code a person's name or email address in this repository.
+
+Example administrator record:
+Access Name: Portal Administrator
+Email: <authorized-admin-email>
 Role: Admin
 Client: empty
 Active: checked
 Notes: Authorized Schulze Client Portal administrator.
-
-Do not create a duplicate Abed admin record. If conflicting duplicates already exist, report them instead of deleting them.
 
 Admin records must have Client empty. Active Client records must link to one client. Never infer an Admin role from an email domain.
 
