@@ -16,7 +16,7 @@ Every Airtable Clients record is synced automatically on change, with a five-min
 
 A client without a primary-contact email needs an explicit active Client grant in **Portal Access** to use LS login; admins can still see that client. Client grants must link exactly one company. No ownership is guessed.
 
-Airtable **Portal Access** now controls explicit Admin and additional Client grants. The initial `public.portal_admins` allowlist is no longer used after Portal Access discovery. `abed@apex-consulting.ai` has the requested active Admin entry in Portal Access. This does not create or invite a LearningSuite/Supabase Auth user; Abed must sign in to LS with that verified email. Admins have read-only access to all portal clients/leads. To revoke the explicit grant, uncheck **Active** in Airtable. To downgrade an admin, set **Role=Client** and link the intended company. The next event-driven sync and authorized refresh apply that scope; independent Primary Contact access still applies.
+Airtable **Portal Access** controls explicit Admin and additional Client grants. Personal administrator names and email addresses are intentionally not documented in this repository. Admins have read-only access to all portal clients/leads. To revoke an explicit grant, uncheck **Active** in Airtable. To downgrade an admin, set **Role=Client** and link the intended company. The next event-driven sync and authorized refresh apply that scope; independent Primary Contact access still applies.
 
 ## Security and operations
 
@@ -26,7 +26,7 @@ The service-only `portal_read_for_identity` RPC resolves scope and data in one s
 
 Tokens stay in browser request memory. No cookies or localStorage are required, and no identity token enters Airtable, n8n execution history or URLs. Supabase function logs contain no identity/token/customer values. The parent bridge must remain limited to this trusted portal URL.
 
-Repository tests cover mocked LS iframe behavior; they do not establish that the bridge is installed in the tenant. Final acceptance: sign in as IT (three IT test leads), a distinct assigned client (only its leads), and Abed (all clients). Reload the iframe/LS page, switch account, revoke access, and confirm no prior account's data reappears. Verify the newest sync timestamp and missing-contact exceptions before handoff.
+Repository tests cover mocked LS iframe behavior; they do not establish that the bridge is installed in the tenant. Final acceptance: sign in as a scoped test client, a distinct assigned client, and an authorized administrator. Reload the iframe/LS page, switch account, revoke access, and confirm no prior account's data reappears. Verify the newest sync timestamp and missing-contact exceptions before handoff.
 
 ## Deployment status (2026-09-17)
 
@@ -35,7 +35,7 @@ Repository tests cover mocked LS iframe behavior; they do not establish that the
 - Edge function portal-session deployed; missing/forged bearer denied, wrong origin denied, query selectors denied, preflight succeeds.
 - LS tenant bridge installation and real-account iframe acceptance require a signed-in tenant settings session; not yet verified.
 
-Validation completed: 35 unit tests and 16 browser tests; TypeScript and production build pass. Browser tests use the actual parent bridge with a mocked identity provider, including delayed old-account token acquisition and delayed old-account API responses. Live database checks confirm IT=3 leads, second assigned client=3, Abed=9 across 3 clients, unknown email denied. Rolled-back probes confirm multi-client scope=6 of 9 leads, admin revocation denied, and stale snapshot denied. Forced RLS and service-only RPC/table access verified.
+Validation completed: 35 unit tests and 16 browser tests; TypeScript and production build pass. Browser tests use the actual parent bridge with a mocked identity provider, including delayed old-account token acquisition and delayed old-account API responses. Live database checks confirmed client isolation, administrator scope and denial for unknown identities. Rolled-back probes confirm multi-client scope=6 of 9 leads, admin revocation denied, and stale snapshot denied. Forced RLS and service-only RPC/table access verified.
 
 ## Airtable-managed access
 
