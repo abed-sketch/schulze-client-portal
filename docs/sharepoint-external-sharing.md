@@ -6,7 +6,7 @@ This GitHub Action is the production-side helper for Schulze onboarding SharePoi
 
 It accepts a single customer site URL such as:
 
-`https://webscoutsteams.sharepoint.com/sites/KD124`
+`https://tenant.sharepoint.com/sites/KDXXX`
 
 The PowerShell script refuses any other tenant host or any path that is not `/sites/KD<number>`. It connects to the SharePoint admin tenant using an Entra application certificate, sets the site to `ExternalUserSharingOnly`, then polls until the change is visible.
 
@@ -38,8 +38,8 @@ n8n dispatches the GitHub event:
 {
   "event_type": "enable-sharepoint-sharing",
   "client_payload": {
-    "site_url": "https://webscoutsteams.sharepoint.com/sites/KD124",
-    "request_id": "sp-KD124-<unique>"
+    "site_url": "https://tenant.sharepoint.com/sites/KDXXX",
+    "request_id": "sp-KDXXX-<unique>"
   }
 }
 ```
@@ -48,8 +48,8 @@ After the job finishes, the action POSTs to the fixed callback URL:
 
 ```json
 {
-  "requestId": "sp-KD124-<unique>",
-  "siteUrl": "https://webscoutsteams.sharepoint.com/sites/KD124",
+  "requestId": "sp-KDXXX-<unique>",
+  "siteUrl": "https://tenant.sharepoint.com/sites/KDXXX",
   "status": "success",
   "runUrl": "https://github.com/.../actions/runs/..."
 }
