@@ -16,7 +16,7 @@ It does **not** contain the separate Welcome Form frontend. The Welcome Form mus
 
 ## Safe visual-editing area
 
-Peer can safely iterate the presentation layer in:
+The client can safely iterate the presentation layer in:
 
 - `src/styles.css`
 - `src/admin.css`
@@ -93,4 +93,4 @@ The portal was intentionally built so a future Schulze brand refresh can mostly 
 
 ## Welcome Form handover gap
 
-Peer also requested ownership of the Welcome Form frontend. That code is not present in this repository, so final project handover still needs the actual Welcome Form repository/deployment identified and documented separately.
+The client also requested ownership of the Welcome Form frontend. That code is not present in this repository, so final project handover still needs the actual Welcome Form repository/deployment identified and documented separately.
