@@ -1,6 +1,6 @@
 # Existing lead editing — implementation contract
 
-Peer's requested scope is intentionally small:
+The requested scope is intentionally small:
 
 - customer may update an **existing** lead,
 - customer may add an interaction,
